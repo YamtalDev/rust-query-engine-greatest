@@ -1,0 +1,3 @@
+[submodule "datafusion"]
+	path = datafusion
+	url = https://github.com/apache/datafusion
