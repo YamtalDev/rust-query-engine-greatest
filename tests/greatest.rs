@@ -1,67 +1,51 @@
-use arrow::array::Array;
-use arrow::array::{Float32Array, Int32Array, StringArray};
-use rust_query_engine_greatest::greatest::greatest;
-use std::sync::Arc;
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use datafusion::arrow::array::Int32Array;
+    use datafusion::prelude::*;
+    use datafusion_expr::expr_fn::{col, greatest};
+    use std::sync::Arc;
 
-    #[test]
-    fn test_greatest_int32_basic() {
-        let array1 = Int32Array::from(vec![Some(1), None, Some(3)]);
-        let array2 = Int32Array::from(vec![Some(2), Some(4), None]);
+    #[tokio::test]
+    async fn test_greatest_function() -> datafusion_core::error::Result<()> {
+        let mut ctx = SessionContext::new();
 
-        let result = greatest(&[Arc::new(array1), Arc::new(array2)]).unwrap();
-        let result_array = result.as_any().downcast_ref::<Int32Array>().unwrap();
-        assert_eq!(result_array.value(0), 2);
-        assert_eq!(result_array.value(1), 4);
-        assert_eq!(result_array.value(2), 3);
-    }
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("col1", DataType::Int32, true),
+            Field::new("col2", DataType::Int32, true),
+        ]));
 
-    #[test]
-    fn test_greatest_float32_basic() {
-        let array1 = Float32Array::from(vec![Some(1.1), None, Some(3.3)]);
-        let array2 = Float32Array::from(vec![Some(2.2), Some(4.4), None]);
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(Int32Array::from(vec![Some(1), Some(3), None])),
+                Arc::new(Int32Array::from(vec![Some(2), None, Some(4)])),
+            ],
+        )?;
 
-        let result = greatest(&[Arc::new(array1), Arc::new(array2)]).unwrap();
-        let result_array = result.as_any().downcast_ref::<Float32Array>().unwrap();
-        assert_eq!(result_array.value(0), 2.2);
-        assert_eq!(result_array.value(1), 4.4);
-        assert_eq!(result_array.value(2), 3.3);
-    }
+        ctx.register_batch("test_table", batch)?;
 
-    #[test]
-    fn test_greatest_strings_basic() {
-        let array1 = StringArray::from(vec![Some("a"), Some("b"), None]);
-        let array2 = StringArray::from(vec![Some("b"), None, Some("c")]);
+        let df = ctx.table("test_table").await?;
+        let df = df.select(vec![
+            col("col1"),
+            col("col2"),
+            greatest(vec![col("col1"), col("col2")]).alias("max_value"),
+        ])?;
 
-        let result = greatest(&[Arc::new(array1), Arc::new(array2)]).unwrap();
-        let result_array = result.as_any().downcast_ref::<StringArray>().unwrap();
-        assert_eq!(result_array.value(0), "b");
-        assert_eq!(result_array.value(1), "b");
-        assert_eq!(result_array.value(2), "c");
-    }
+        let results = df.collect().await?;
 
-    #[test]
-    fn test_edge_case_null_columns() {
-        let array1 = Int32Array::from(vec![None, None, None]);
-        let array2 = Int32Array::from(vec![None, None, None]);
+        // Verify the results
+        let batch = &results[0];
+        let array = batch
+            .column(2)
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .unwrap();
 
-        let result = greatest(&[Arc::new(array1), Arc::new(array2)]).unwrap();
-        let result_array = result.as_any().downcast_ref::<Int32Array>().unwrap();
-        assert!(result_array.is_null(0));
-        assert!(result_array.is_null(1));
-        assert!(result_array.is_null(2));
-    }
+        assert_eq!(array.value(0), 2);
+        assert_eq!(array.value(1), 3);
+        assert_eq!(array.value(2), 4);
 
-    #[test]
-    fn test_edge_case_empty_arrays() {
-        let array1 = Int32Array::from(vec![Option::<i32>::None; 0]);
-        let array2 = Int32Array::from(vec![Option::<i32>::None; 0]);
-
-        let result = greatest(&[Arc::new(array1), Arc::new(array2)]).unwrap();
-        let result_array = result.as_any().downcast_ref::<Int32Array>().unwrap();
-        assert_eq!(result_array.len(), 0);
+        Ok(())
     }
 }

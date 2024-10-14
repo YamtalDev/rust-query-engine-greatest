@@ -1,50 +1,50 @@
-use arrow::array::{Float32Array, Int32Array, StringArray};
-use rust_query_engine_greatest::greatest::greatest;
+use datafusion::prelude::*;
+use datafusion_expr::expr_fn::{col, greatest};
+use datafusion::arrow::array::Int32Array;
 use std::sync::Arc;
 
-use pyo3::prelude::*;
-use pyo3::types::PyModule;
+#[tokio::main]
+async fn main() -> datafusion::error::Result<()> {
+    // Create an execution context
+    let mut ctx = SessionContext::new();
 
-fn run_spark_greatest() -> PyResult<()> {
-    Python::with_gil(|py| {
-        // Import the sys module
-        let sys = PyModule::import_bound(py, "sys")?;
-        sys.getattr("path")?.call_method1("append", ("./",))?;
+    // Define a schema
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("col1", DataType::Int32, true),
+        Field::new("col2", DataType::Int32, true),
+        Field::new("col3", DataType::Int32, true),
+    ]));
 
-        // Import the Python script (pyspark_greatest.py)
-        let pyspark_greatest = PyModule::import_bound(py, "pyspark_greatest")?;
+    // Create data
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(Int32Array::from(vec![Some(10), Some(50), Some(1)])),
+            Arc::new(Int32Array::from(vec![Some(20), Some(40), Some(2)])),
+            Arc::new(Int32Array::from(vec![Some(30), Some(30), Some(3)])),
+        ],
+    )?;
 
-        // Call the Spark session function from the Python script
-        let result = pyspark_greatest.getattr("main")?.call0()?;
+    // Register data as a table
+    ctx.register_batch("my_table", batch)?;
 
-        println!("Spark result: {:?}", result);
-        Ok(())
-    })
-}
+    // Build a DataFrame using the `greatest` function
+    let df = ctx.table("my_table").await?;
 
-fn main() {
-    // Example 1: Int32
-    let array1 = Int32Array::from(vec![Some(1), None, Some(3)]);
-    let array2 = Int32Array::from(vec![Some(2), Some(4), None]);
-    let result = greatest(&[Arc::new(array1), Arc::new(array2)]).unwrap();
-    println!("Greatest Int32: {:?}", result);
+    let df = df.select(vec![
+        col("col1"),
+        col("col2"),
+        col("col3"),
+        greatest(vec![col("col1"), col("col2"), col("col3")]).alias("max_value"),
+    ])?;
 
-    // Example 2: Float32
-    let array1 = Float32Array::from(vec![Some(1.1), None, Some(3.3)]);
-    let array2 = Float32Array::from(vec![Some(2.2), Some(4.4), None]);
-    let result = greatest(&[Arc::new(array1), Arc::new(array2)]).unwrap();
-    println!("Greatest Float32: {:?}", result);
+    // Collect the results
+    let results = df.collect().await?;
 
-    // Example 3: Strings
-    let array1 = StringArray::from(vec![Some("a"), Some("b"), None]);
-    let array2 = StringArray::from(vec![Some("b"), None, Some("c")]);
-    let result = greatest(&[Arc::new(array1), Arc::new(array2)]).unwrap();
-    println!("Greatest String: {:?}", result);
-
-    match run_spark_greatest() {
-        Ok(_) => println!("Spark script executed successfully!"),
-        Err(e) => eprintln!("Error executing Spark script: {:?}", e),
+    // Display the results
+    for batch in results {
+        println!("{:?}", batch);
     }
 
-    println!("\nTesting completed. For more detailed tests, please check the integration tests.");
+    Ok(())
 }

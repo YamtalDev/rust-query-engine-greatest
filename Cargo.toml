@@ -4,10 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-datafusion = { path = "datafusion/datafusion/core/" }
-datafusion-common = { path = "datafusion/datafusion/common/" }
+datafusion-expr = { path = "datafusion/datafusion/expr" }
+datafusion-common = { path = "datafusion/datafusion/common" }
+datafusion-physical-expr = { path = "datafusion/datafusion/physical-expr" }
 pyo3 = { version = "0.22", features = ["extension-module", "auto-initialize"] }
-arrow = "53.1.0"
+datafusion = "42.0.0"
 
 [profile.dev]
 opt-level = 1
