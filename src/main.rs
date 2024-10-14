@@ -41,5 +41,10 @@ fn main() {
     let result = greatest(&[Arc::new(array1), Arc::new(array2)]).unwrap();
     println!("Greatest String: {:?}", result);
 
+    match run_spark_greatest() {
+        Ok(_) => println!("Spark script executed successfully!"),
+        Err(e) => eprintln!("Error executing Spark script: {:?}", e),
+    }
+
     println!("\nTesting completed. For more detailed tests, please check the integration tests.");
 }
