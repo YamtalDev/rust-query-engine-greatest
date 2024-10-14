@@ -7,15 +7,15 @@ use pyo3::types::PyModule;
 
 fn run_spark_greatest() -> PyResult<()> {
     Python::with_gil(|py| {
-        // Load Python module and execute the PySpark code
-        let sys = PyModule::import(py, "sys")?;
-        sys.get("path")?.call_method1("append", ("./",))?;
+        // Import the sys module
+        let sys = PyModule::import_bound(py, "sys")?;
+        sys.getattr("path")?.call_method1("append", ("./",))?;
 
         // Import the Python script (pyspark_greatest.py)
-        let pyspark_greatest = PyModule::import(py, "pyspark_greatest")?;
+        let pyspark_greatest = PyModule::import_bound(py, "pyspark_greatest")?;
 
         // Call the Spark session function from the Python script
-        let result = pyspark_greatest.call_function0("main")?;
+        let result = pyspark_greatest.getattr("main")?.call0()?;
 
         println!("Spark result: {:?}", result);
         Ok(())
