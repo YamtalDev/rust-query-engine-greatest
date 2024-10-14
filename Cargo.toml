@@ -1,0 +1,27 @@
+[package]
+name = "rust-query-engine-greatest"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+datafusion = { path = "datafusion/datafusion/core/" }
+datafusion-common = { path = "datafusion/datafusion/common/" }
+pyo3 = { version = "0.22", features = ["extension-module", "auto-initialize"] }
+arrow = "53.1.0"
+
+[profile.dev]
+opt-level = 1
+debug = true
+
+[profile.release]
+opt-level = 3
+debug = true
+lto = true
+
+[lib]
+name = "rust_query_engine_greatest"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rust-query-engine-greatest"
+path = "src/main.rs"
