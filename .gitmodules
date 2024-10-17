@@ -1,6 +1,3 @@
-[submodule "datafusion"]
-	path = datafusion
-	url = https://github.com/apache/datafusion
 [submodule "spark"]
 	path = spark
 	url = https://github.com/apache/spark.git
