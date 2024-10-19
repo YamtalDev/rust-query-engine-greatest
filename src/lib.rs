@@ -37,7 +37,7 @@ fn run_greatest_query(input: Vec<Vec<i32>>) -> PyResult<Vec<i32>> {
 }
 
 #[pymodule]
-fn datafusion_greatest(_py: Python, m: &PyModule) -> PyResult<()> {
+fn datafusion_greatest(m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_greatest_query, m)?)?;
     Ok(())
 }

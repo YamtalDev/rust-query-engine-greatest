@@ -10,7 +10,7 @@ datafusion-common = { version = "42.0.0" }
 datafusion-expr = { version = "42.0.0" }
 datafusion-functions-nested = { path = "datafusion-greatest/datafusion/functions-nested" }
 tokio = { version = "1.39.3", features = ["full"] }
-pyo3 = { version = "0.21.0", features = ["extension-module"] }
+pyo3 = { version = "0.21.1", features = ["extension-module"] }
 spin = { version = "0.9.8" }
 
 [lib]
