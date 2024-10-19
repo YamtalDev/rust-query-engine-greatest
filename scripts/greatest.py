@@ -1,27 +1,42 @@
+import greatest
+import pyspark
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import greatest
+from pyspark.sql.functions import greatest as spark_greatest
 
-# Initialize Spark session
-spark = SparkSession.builder.master("local").appName("GreatestFunction").getOrCreate()
+def test_greatest():
+    # Initialize Spark
+    spark = SparkSession.builder.appName("GreatestTest").getOrCreate()
 
-# Create a sample dataframe with similar data to your DataFusion tests
-data = [(1, 4, 3), (None, 5, 2), (6, None, None)]
-df = spark.createDataFrame(data, ['a', 'b', 'c'])
+    # Create a sample DataFrame
+    data = [
+        (1, 4, 7),
+        (2, 5, 1),
+        (3, 6, 2)
+    ]
+    df = spark.createDataFrame(data, ["col1", "col2", "col3"])
 
-# Apply Spark's greatest function
-spark_result = df.select(greatest(df.a, df.b, df.c).alias("greatest")).collect()
+    # Apply Spark's greatest function
+    spark_df = df.withColumn("spark_greatest", spark_greatest("col1", "col2", "col3"))
+    spark_result = spark_df.select("spark_greatest").collect()
 
-# Print Spark results
-print("Spark Results:")
-for row in spark_result:
-    print(f"Greatest: {row.greatest}")
+    # Prepare input for Rust function
+    input_data = [
+        [1, 2, 3],  # col1
+        [4, 5, 6],  # col2
+        [7, 1, 2]   # col3
+    ]
 
-# Add a function to compare the results with your DataFusion implementation
-def compare_results(datafusion_result, spark_result):
-    if datafusion_result == spark_result:
-        print("The results match!")
-    else:
-        print("The results differ.")
+    # Apply Rust's greatest function via Python bindings
+    rust_result = greatest.run_greatest_query(input_data)
 
-# Now call your DataFusion greatest function in Rust and pass the results to compare_results.
-# You will need to call your Rust function externally or compare the results manually in your Rust code.
+    # Extract Spark results
+    spark_greatest_values = [row['spark_greatest'] for row in spark_result]
+
+    # Compare results
+    assert spark_greatest_values == rust_result, f"Mismatch:\nSpark: {spark_greatest_values}\nRust: {rust_result}"
+
+    spark.stop()
+    print("Test completed successfully and results match.")
+
+if __name__ == "__main__":
+    test_greatest()

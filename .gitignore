@@ -25,4 +25,5 @@ Cargo.lock
 /target
 
 *vscode*
+.venv
 
