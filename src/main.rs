@@ -1,12 +1,21 @@
+use datafusion::common::Result;
 use datafusion::prelude::*;
-use datafusion_expr::expr_fn::{col, greatest};
-use datafusion::arrow::array::Int32Array;
+use datafusion_functions_nested::greatest::{greatest, greatest_udf};
 use std::sync::Arc;
 
+// Import necessary arrow types
+use arrow::array::Int32Array;
+use arrow::datatypes::{DataType, Field, Schema};
+use arrow::record_batch::RecordBatch;
+use datafusion_common::DataFusionError;
+
 #[tokio::main]
-async fn main() -> datafusion::error::Result<()> {
+async fn main() -> std::result::Result<(), DataFusionError> {
     // Create an execution context
     let mut ctx = SessionContext::new();
+
+    // Register the UDF
+    ctx.register_udf(greatest_udf().as_ref().clone());
 
     // Define a schema
     let schema = Arc::new(Schema::new(vec![
@@ -15,7 +24,7 @@ async fn main() -> datafusion::error::Result<()> {
         Field::new("col3", DataType::Int32, true),
     ]));
 
-    // Create data
+    // Create a record batch
     let batch = RecordBatch::try_new(
         schema.clone(),
         vec![
@@ -23,7 +32,8 @@ async fn main() -> datafusion::error::Result<()> {
             Arc::new(Int32Array::from(vec![Some(20), Some(40), Some(2)])),
             Arc::new(Int32Array::from(vec![Some(30), Some(30), Some(3)])),
         ],
-    )?;
+    )
+    .map_err(|e| DataFusionError::ArrowError(e, None))?;
 
     // Register data as a table
     ctx.register_batch("my_table", batch)?;
