@@ -1,51 +1,68 @@
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use datafusion::arrow::array::Int32Array;
-    use datafusion::prelude::*;
-    use datafusion_expr::expr_fn::{col, greatest};
-    use std::sync::Arc;
+// tests/greatest.rs
 
-    #[tokio::test]
-    async fn test_greatest_function() -> datafusion_core::error::Result<()> {
-        let mut ctx = SessionContext::new();
+use arrow::array::*;
+use arrow::datatypes::{DataType, Field, Schema};
+use arrow::record_batch::RecordBatch;
+use datafusion_common::Result;
+use datafusion_greatest::greatest::greatest_inner;
+use std::sync::Arc;
 
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("col1", DataType::Int32, true),
-            Field::new("col2", DataType::Int32, true),
-        ]));
+#[tokio::test]
+async fn test_greatest_function() -> Result<()> {
+    // Define schema
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("col1", DataType::Int32, true),
+        Field::new("col2", DataType::Int32, true),
+    ]));
 
-        let batch = RecordBatch::try_new(
-            schema.clone(),
-            vec![
-                Arc::new(Int32Array::from(vec![Some(1), Some(3), None])),
-                Arc::new(Int32Array::from(vec![Some(2), None, Some(4)])),
-            ],
-        )?;
+    // Create RecordBatch
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(Int32Array::from(vec![1, 2, 3])) as ArrayRef,
+            Arc::new(Int32Array::from(vec![4, 5, 6])) as ArrayRef,
+        ],
+    )?;
 
-        ctx.register_batch("test_table", batch)?;
+    // Call greatest_inner
+    let result = greatest_inner(&[batch.column(0).clone(), batch.column(1).clone()])?;
+    let result_int32 = result
+        .as_any()
+        .downcast_ref::<Int32Array>()
+        .expect("Failed to downcast to Int32Array");
 
-        let df = ctx.table("test_table").await?;
-        let df = df.select(vec![
-            col("col1"),
-            col("col2"),
-            greatest(vec![col("col1"), col("col2")]).alias("max_value"),
-        ])?;
+    let expected = Int32Array::from(vec![4, 5, 6]);
+    assert_eq!(result_int32, &expected);
 
-        let results = df.collect().await?;
+    Ok(())
+}
 
-        // Verify the results
-        let batch = &results[0];
-        let array = batch
-            .column(2)
-            .as_any()
-            .downcast_ref::<Int32Array>()
-            .unwrap();
+#[tokio::test]
+async fn test_greatest_function_with_nulls() -> Result<()> {
+    // Define schema
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("col1", DataType::Int32, true),
+        Field::new("col2", DataType::Int32, true),
+    ]));
 
-        assert_eq!(array.value(0), 2);
-        assert_eq!(array.value(1), 3);
-        assert_eq!(array.value(2), 4);
+    // Create RecordBatch with nulls
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(Int32Array::from(vec![Some(1), None, Some(3)])) as ArrayRef,
+            Arc::new(Int32Array::from(vec![Some(4), Some(5), None])) as ArrayRef,
+        ],
+    )?;
 
-        Ok(())
-    }
+    // Call greatest_inner
+    let result = greatest_inner(&[batch.column(0).clone(), batch.column(1).clone()])?;
+    let result_int32 = result
+        .as_any()
+        .downcast_ref::<Int32Array>()
+        .expect("Failed to downcast to Int32Array");
+
+    let expected = Int32Array::from(vec![4, 5, 3]);
+    assert_eq!(result_int32, &expected);
+
+    Ok(())
 }

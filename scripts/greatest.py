@@ -1,7 +1,10 @@
 import greatest
-import pyspark
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import greatest as spark_greatest
+import sys
+print(sys.executable)
+
+# Rest of the script...
 
 def test_greatest():
     # Initialize Spark
@@ -19,7 +22,7 @@ def test_greatest():
     spark_df = df.withColumn("spark_greatest", spark_greatest("col1", "col2", "col3"))
     spark_result = spark_df.select("spark_greatest").collect()
 
-    # Prepare input for Rust function
+    # Prepare input for Rust function (transpose columns to rows)
     input_data = [
         [1, 2, 3],  # col1
         [4, 5, 6],  # col2
