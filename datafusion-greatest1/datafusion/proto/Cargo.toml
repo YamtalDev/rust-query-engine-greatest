@@ -1,0 +1,66 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+[package]
+name = "datafusion-proto"
+description = "Protobuf serialization of DataFusion logical plan expressions"
+keywords = ["arrow", "query", "sql"]
+readme = "README.md"
+version = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+# Specify MSRV here as `cargo msrv` doesn't support workspace version
+rust-version = "1.78"
+
+# Exclude proto files so crates.io consumers don't need protoc
+exclude = ["*.proto"]
+
+[lints]
+workspace = true
+
+[lib]
+name = "datafusion_proto"
+path = "src/lib.rs"
+
+[features]
+default = ["parquet"]
+json = ["pbjson", "serde", "serde_json"]
+parquet = ["datafusion/parquet", "datafusion-common/parquet"]
+
+[dependencies]
+arrow = { workspace = true }
+chrono = { workspace = true }
+datafusion = { workspace = true, default-features = true }
+datafusion-common = { workspace = true, default-features = true }
+datafusion-expr = { workspace = true }
+datafusion-proto-common = { workspace = true }
+object_store = { workspace = true }
+pbjson = { workspace = true, optional = true }
+prost = { workspace = true }
+serde = { version = "1.0", optional = true }
+serde_json = { workspace = true, optional = true }
+
+[dev-dependencies]
+datafusion-functions = { workspace = true, default-features = true }
+datafusion-functions-aggregate = { workspace = true }
+datafusion-functions-window-common = { workspace = true }
+doc-comment = { workspace = true }
+strum = { version = "0.26.1", features = ["derive"] }
+tokio = { workspace = true, features = ["rt-multi-thread"] }

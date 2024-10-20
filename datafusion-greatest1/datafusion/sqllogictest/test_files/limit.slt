@@ -1,0 +1,713 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+
+#   http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+##########
+## Limit Tests
+##########
+
+statement ok
+CREATE EXTERNAL TABLE aggregate_test_100 (
+  c1  VARCHAR NOT NULL,
+  c2  TINYINT NOT NULL,
+  c3  SMALLINT NOT NULL,
+  c4  SMALLINT,
+  c5  INT,
+  c6  BIGINT NOT NULL,
+  c7  SMALLINT NOT NULL,
+  c8  INT NOT NULL,
+  c9  BIGINT UNSIGNED NOT NULL,
+  c10 VARCHAR NOT NULL,
+  c11 FLOAT NOT NULL,
+  c12 DOUBLE NOT NULL,
+  c13 VARCHAR NOT NULL
+)
+STORED AS CSV
+LOCATION '../../testing/data/csv/aggregate_test_100.csv'
+OPTIONS ('format.has_header' 'true');
+
+# async fn csv_query_limit
+query T
+SELECT c1 FROM aggregate_test_100 LIMIT 2
+----
+c
+d
+
+# async fn csv_query_limit_bigger_than_nbr_of_rows
+query I
+SELECT c2 FROM aggregate_test_100 LIMIT 200
+----
+2
+5
+1
+1
+5
+4
+3
+3
+1
+4
+1
+4
+3
+2
+1
+1
+2
+1
+3
+2
+4
+1
+5
+4
+2
+1
+4
+5
+2
+3
+4
+2
+1
+5
+3
+1
+2
+3
+3
+3
+2
+4
+1
+3
+2
+5
+2
+1
+4
+1
+4
+2
+5
+4
+2
+3
+4
+4
+4
+5
+4
+2
+1
+2
+4
+2
+3
+5
+1
+1
+4
+2
+1
+2
+1
+1
+5
+4
+5
+2
+3
+2
+4
+1
+3
+4
+3
+2
+5
+3
+3
+2
+5
+5
+4
+1
+3
+3
+4
+4
+
+# async fn csv_query_limit_with_same_nbr_of_rows
+query I
+SELECT c2 FROM aggregate_test_100 LIMIT 100
+----
+2
+5
+1
+1
+5
+4
+3
+3
+1
+4
+1
+4
+3
+2
+1
+1
+2
+1
+3
+2
+4
+1
+5
+4
+2
+1
+4
+5
+2
+3
+4
+2
+1
+5
+3
+1
+2
+3
+3
+3
+2
+4
+1
+3
+2
+5
+2
+1
+4
+1
+4
+2
+5
+4
+2
+3
+4
+4
+4
+5
+4
+2
+1
+2
+4
+2
+3
+5
+1
+1
+4
+2
+1
+2
+1
+1
+5
+4
+5
+2
+3
+2
+4
+1
+3
+4
+3
+2
+5
+3
+3
+2
+5
+5
+4
+1
+3
+3
+4
+4
+
+# async fn csv_query_limit_zero
+query T
+SELECT c1 FROM aggregate_test_100 LIMIT 0
+----
+
+# async fn csv_offset_without_limit_99
+query T
+SELECT c1 FROM aggregate_test_100 OFFSET 99
+----
+e
+
+# async fn csv_offset_without_limit_100
+query T
+SELECT c1 FROM aggregate_test_100 OFFSET 100
+----
+
+# async fn csv_offset_without_limit_101
+query T
+SELECT c1 FROM aggregate_test_100 OFFSET 101
+----
+
+# async fn csv_query_offset
+query T
+SELECT c1 FROM aggregate_test_100 OFFSET 2 LIMIT 2
+----
+b
+a
+
+# async fn csv_query_offset_the_same_as_nbr_of_rows
+query T
+SELECT c1 FROM aggregate_test_100 LIMIT 1 OFFSET 100
+----
+
+# async fn csv_query_offset_bigger_than_nbr_of_rows
+query T
+SELECT c1 FROM aggregate_test_100 LIMIT 1 OFFSET 101
+----
+
+#
+# global limit statistics test
+#
+
+statement ok
+CREATE TABLE IF NOT EXISTS t1 (a INT) AS VALUES(1),(2),(3),(4),(5),(6),(7),(8),(9),(10);
+
+# The aggregate does not need to be computed because the input statistics are exact and
+# the number of rows is less than the skip value (OFFSET).
+query TT
+EXPLAIN SELECT COUNT(*) FROM (SELECT a FROM t1 LIMIT 3 OFFSET 11);
+----
+logical_plan
+01)Aggregate: groupBy=[[]], aggr=[[count(Int64(1)) AS count(*)]]
+02)--Limit: skip=11, fetch=3
+03)----TableScan: t1 projection=[], fetch=14
+physical_plan
+01)ProjectionExec: expr=[0 as count(*)]
+02)--PlaceholderRowExec
+
+query I
+SELECT COUNT(*) FROM (SELECT a FROM t1 LIMIT 3 OFFSET 11);
+----
+0
+
+# The aggregate does not need to be computed because the input statistics are exact and
+# the number of rows is less than or equal to the "fetch+skip" value (LIMIT+OFFSET).
+query TT
+EXPLAIN SELECT COUNT(*) FROM (SELECT a FROM t1 LIMIT 3 OFFSET 8);
+----
+logical_plan
+01)Aggregate: groupBy=[[]], aggr=[[count(Int64(1)) AS count(*)]]
+02)--Limit: skip=8, fetch=3
+03)----TableScan: t1 projection=[], fetch=11
+physical_plan
+01)ProjectionExec: expr=[2 as count(*)]
+02)--PlaceholderRowExec
+
+query I
+SELECT COUNT(*) FROM (SELECT a FROM t1 LIMIT 3 OFFSET 8);
+----
+2
+
+# The aggregate does not need to be computed because the input statistics are exact and
+# an OFFSET, but no LIMIT, is specified.
+query TT
+EXPLAIN SELECT COUNT(*) FROM (SELECT a FROM t1 OFFSET 8);
+----
+logical_plan
+01)Aggregate: groupBy=[[]], aggr=[[count(Int64(1)) AS count(*)]]
+02)--Limit: skip=8, fetch=None
+03)----TableScan: t1 projection=[]
+physical_plan
+01)ProjectionExec: expr=[2 as count(*)]
+02)--PlaceholderRowExec
+
+query I
+SELECT COUNT(*) FROM (SELECT a FROM t1 LIMIT 3 OFFSET 8);
+----
+2
+
+# The aggregate needs to be computed because the input statistics are inexact.
+query TT
+EXPLAIN SELECT COUNT(*) FROM (SELECT a FROM t1 WHERE a > 3 LIMIT 3 OFFSET 6);
+----
+logical_plan
+01)Aggregate: groupBy=[[]], aggr=[[count(Int64(1)) AS count(*)]]
+02)--Projection: 
+03)----Limit: skip=6, fetch=3
+04)------Filter: t1.a > Int32(3)
+05)--------TableScan: t1 projection=[a]
+physical_plan
+01)AggregateExec: mode=Final, gby=[], aggr=[count(*)]
+02)--CoalescePartitionsExec
+03)----AggregateExec: mode=Partial, gby=[], aggr=[count(*)]
+04)------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+05)--------ProjectionExec: expr=[]
+06)----------GlobalLimitExec: skip=6, fetch=3
+07)------------CoalesceBatchesExec: target_batch_size=8192, fetch=9
+08)--------------FilterExec: a@0 > 3
+09)----------------MemoryExec: partitions=1, partition_sizes=[1]
+
+query I
+SELECT COUNT(*) FROM (SELECT a FROM t1 WHERE a > 3 LIMIT 3 OFFSET 6);
+----
+1
+
+# generate BIGINT data from 1 to 1000 in multiple partitions
+statement ok
+CREATE TABLE t1000 (i BIGINT) AS
+WITH t AS (VALUES (0), (0), (0), (0), (0), (0), (0), (0), (0), (0))
+SELECT ROW_NUMBER() OVER (PARTITION BY t1.column1) FROM t t1, t t2, t t3;
+
+statement ok
+set datafusion.explain.show_sizes = false;
+
+# verify that there are multiple partitions in the input so that this tests
+# multi-partition limit.
+query TT
+EXPLAIN SELECT DISTINCT i FROM t1000;
+----
+logical_plan
+01)Aggregate: groupBy=[[t1000.i]], aggr=[[]]
+02)--TableScan: t1000 projection=[i]
+physical_plan
+01)AggregateExec: mode=FinalPartitioned, gby=[i@0 as i], aggr=[]
+02)--CoalesceBatchesExec: target_batch_size=8192
+03)----RepartitionExec: partitioning=Hash([i@0], 4), input_partitions=4
+04)------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+05)--------AggregateExec: mode=Partial, gby=[i@0 as i], aggr=[]
+06)----------MemoryExec: partitions=1
+
+statement ok
+set datafusion.explain.show_sizes = true;
+
+query I
+SELECT i FROM t1000 ORDER BY i DESC LIMIT 3;
+----
+1000
+999
+998
+
+query I
+SELECT i FROM t1000 ORDER BY i LIMIT 3;
+----
+1
+2
+3
+
+query I
+SELECT COUNT(*) FROM (SELECT i FROM t1000 LIMIT 3);
+----
+3
+
+# limit_multi_partitions
+statement ok
+CREATE TABLE t15 (i BIGINT);
+
+query I
+INSERT INTO t15 VALUES (1);
+----
+1
+
+query I
+INSERT INTO t15 VALUES (1), (2);
+----
+2
+
+query I
+INSERT INTO t15 VALUES (1), (2), (3);
+----
+3
+
+query I
+INSERT INTO t15 VALUES (1), (2), (3), (4);
+----
+4
+
+query I
+INSERT INTO t15 VALUES (1), (2), (3), (4), (5);
+----
+5
+
+query I
+SELECT COUNT(*) FROM t15;
+----
+15
+
+query I
+SELECT COUNT(*) FROM (SELECT i FROM t15 LIMIT 1);
+----
+1
+
+query I
+SELECT COUNT(*) FROM (SELECT i FROM t15 LIMIT 2);
+----
+2
+
+query I
+SELECT COUNT(*) FROM (SELECT i FROM t15 LIMIT 3);
+----
+3
+
+query I
+SELECT COUNT(*) FROM (SELECT i FROM t15 LIMIT 4);
+----
+4
+
+query I
+SELECT COUNT(*) FROM (SELECT i FROM t15 LIMIT 5);
+----
+5
+
+query I
+SELECT COUNT(*) FROM (SELECT i FROM t15 LIMIT 6);
+----
+6
+
+query I
+SELECT COUNT(*) FROM (SELECT i FROM t15 LIMIT 7);
+----
+7
+
+query I
+SELECT COUNT(*) FROM (SELECT i FROM t15 LIMIT 8);
+----
+8
+
+query I
+SELECT COUNT(*) FROM (SELECT i FROM t15 LIMIT 9);
+----
+9
+
+########
+# Clean up after the test
+########
+
+statement ok
+drop table aggregate_test_100;
+
+
+## Test limit pushdown in StreamingTableExec
+
+## Create sorted table with 5 rows
+query I
+COPY (select * from (values
+   (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd'), (5, 'e')
+)) TO 'test_files/scratch/limit/data.csv' STORED AS CSV OPTIONS ('format.has_header' 'false');
+----
+5
+
+statement ok
+CREATE UNBOUNDED EXTERNAL TABLE data (
+    "column1"  INTEGER,
+    "column2" VARCHAR,
+) STORED AS CSV
+WITH ORDER ("column1", "column2")
+LOCATION 'test_files/scratch/limit/data.csv' OPTIONS ('format.has_header' 'false');
+
+query IT
+SELECT * from data LIMIT 3;
+----
+1 a
+2 b
+3 c
+
+# query
+query TT
+explain SELECT * FROM data LIMIT 3;
+----
+logical_plan
+01)Limit: skip=0, fetch=3
+02)--TableScan: data projection=[column1, column2], fetch=3
+physical_plan StreamingTableExec: partition_sizes=1, projection=[column1, column2], infinite_source=true, fetch=3, output_ordering=[column1@0 ASC NULLS LAST, column2@1 ASC NULLS LAST]
+
+
+# Do not remove limit with Sort when skip is used
+query TT
+explain SELECT * FROM data ORDER BY column1 LIMIT 3,3;
+----
+logical_plan
+01)Limit: skip=3, fetch=3
+02)--Sort: data.column1 ASC NULLS LAST, fetch=6
+03)----TableScan: data projection=[column1, column2]
+physical_plan
+01)GlobalLimitExec: skip=3, fetch=3
+02)--StreamingTableExec: partition_sizes=1, projection=[column1, column2], infinite_source=true, fetch=6, output_ordering=[column1@0 ASC NULLS LAST, column2@1 ASC NULLS LAST]
+
+
+statement ok
+drop table data;
+
+
+####################
+# Test issue: limit pushdown with offsets
+# Ensure the offset is not lost: https://github.com/apache/datafusion/issues/12423
+####################
+
+statement ok
+CREATE EXTERNAL TABLE ordered_table (
+  a0 INT,
+  a INT,
+  b INT,
+  c INT UNSIGNED,
+  d INT
+)
+STORED AS CSV
+WITH ORDER (c ASC)
+LOCATION '../core/tests/data/window_2.csv'
+OPTIONS ('format.has_header' 'true');
+
+# all results
+query II
+SELECT b, sum(a) FROM ordered_table GROUP BY b order by b desc;
+----
+3 25
+2 25
+1 0
+0 0
+
+# limit only
+query II
+SELECT b, sum(a) FROM ordered_table GROUP BY b order by b desc LIMIT 3;
+----
+3 25
+2 25
+1 0
+
+# offset only
+query II
+SELECT b, sum(a) FROM ordered_table GROUP BY b order by b desc OFFSET 1;
+----
+2 25
+1 0
+0 0
+
+# offset + limit
+query II
+SELECT b, sum(a) FROM ordered_table GROUP BY b order by b desc OFFSET 1 LIMIT 2;
+----
+2 25
+1 0
+
+# Applying offset & limit when multiple streams from groupby
+# the plan must still have a global limit to apply the offset
+query TT
+EXPLAIN SELECT b, sum(a) FROM ordered_table GROUP BY b order by b desc OFFSET 1 LIMIT 2;
+----
+logical_plan
+01)Limit: skip=1, fetch=2
+02)--Sort: ordered_table.b DESC NULLS FIRST, fetch=3
+03)----Aggregate: groupBy=[[ordered_table.b]], aggr=[[sum(CAST(ordered_table.a AS Int64))]]
+04)------TableScan: ordered_table projection=[a, b]
+physical_plan
+01)GlobalLimitExec: skip=1, fetch=2
+02)--SortPreservingMergeExec: [b@0 DESC], fetch=3
+03)----SortExec: TopK(fetch=3), expr=[b@0 DESC], preserve_partitioning=[true]
+04)------AggregateExec: mode=FinalPartitioned, gby=[b@0 as b], aggr=[sum(ordered_table.a)]
+05)--------CoalesceBatchesExec: target_batch_size=8192
+06)----------RepartitionExec: partitioning=Hash([b@0], 4), input_partitions=4
+07)------------AggregateExec: mode=Partial, gby=[b@1 as b], aggr=[sum(ordered_table.a)]
+08)--------------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+09)----------------CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/core/tests/data/window_2.csv]]}, projection=[a, b], has_header=true
+
+# Applying offset & limit when multiple streams from union
+# the plan must still have a global limit to apply the offset
+query TT
+explain select * FROM (
+  select c FROM ordered_table
+  UNION ALL
+  select d FROM ordered_table
+) order by 1 desc LIMIT 10 OFFSET 4;
+----
+logical_plan
+01)Limit: skip=4, fetch=10
+02)--Sort: ordered_table.c DESC NULLS FIRST, fetch=14
+03)----Union
+04)------Projection: CAST(ordered_table.c AS Int64) AS c
+05)--------TableScan: ordered_table projection=[c]
+06)------Projection: CAST(ordered_table.d AS Int64) AS c
+07)--------TableScan: ordered_table projection=[d]
+physical_plan
+01)GlobalLimitExec: skip=4, fetch=10
+02)--SortPreservingMergeExec: [c@0 DESC], fetch=14
+03)----UnionExec
+04)------SortExec: TopK(fetch=14), expr=[c@0 DESC], preserve_partitioning=[true]
+05)--------ProjectionExec: expr=[CAST(c@0 AS Int64) as c]
+06)----------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+07)------------CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/core/tests/data/window_2.csv]]}, projection=[c], output_ordering=[c@0 ASC NULLS LAST], has_header=true
+08)------SortExec: TopK(fetch=14), expr=[c@0 DESC], preserve_partitioning=[true]
+09)--------ProjectionExec: expr=[CAST(d@0 AS Int64) as c]
+10)----------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+11)------------CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/core/tests/data/window_2.csv]]}, projection=[d], has_header=true
+
+# Applying LIMIT & OFFSET to subquery.
+query III
+select t1.b, c, c2 FROM (
+  select b, c FROM ordered_table ORDER BY b desc, c desc OFFSET 1 LIMIT 4
+) as t1 INNER JOIN (
+  select b, c as c2 FROM ordered_table ORDER BY b desc, d desc OFFSET 1 LIMIT 4
+) as t2
+ON t1.b = t2.b
+ORDER BY t1.b desc, c desc, c2 desc;
+----
+3 98 96
+3 98 89
+3 98 82
+3 98 79
+3 97 96
+3 97 89
+3 97 82
+3 97 79
+3 96 96
+3 96 89
+3 96 82
+3 96 79
+3 95 96
+3 95 89
+3 95 82
+3 95 79
+
+# Apply OFFSET & LIMIT to both parent and child (subquery).
+query III
+select t1.b, c, c2 FROM (
+  select b, c FROM ordered_table ORDER BY b desc, c desc OFFSET 1 LIMIT 4
+) as t1 INNER JOIN (
+  select b, c as c2 FROM ordered_table ORDER BY b desc, d desc OFFSET 1 LIMIT 4
+) as t2
+ON t1.b = t2.b
+ORDER BY t1.b desc, c desc, c2 desc
+OFFSET 3 LIMIT 2;
+----
+3 99 82
+3 99 79
+
+statement ok
+drop table ordered_table;

@@ -1,0 +1,53 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+[package]
+name = "datafusion-substrait"
+description = "DataFusion Substrait Producer and Consumer"
+readme = "README.md"
+version = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+# Specify MSRV here as `cargo msrv` doesn't support workspace version
+rust-version = "1.78"
+
+[lints]
+workspace = true
+
+[dependencies]
+arrow-buffer = { workspace = true }
+async-recursion = "1.0"
+chrono = { workspace = true }
+datafusion = { workspace = true, default-features = true }
+itertools = { workspace = true }
+object_store = { workspace = true }
+pbjson-types = "0.7"
+# TODO use workspace version
+prost = "0.13"
+substrait = { version = "0.42", features = ["serde"] }
+url = { workspace = true }
+
+[dev-dependencies]
+datafusion-functions-aggregate = { workspace = true }
+serde_json = "1.0"
+tokio = { workspace = true }
+
+[features]
+protoc = ["substrait/protoc"]

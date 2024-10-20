@@ -1,0 +1,88 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+[package]
+name = "datafusion-examples"
+description = "DataFusion usage examples"
+keywords = ["arrow", "query", "sql"]
+publish = false
+readme = "README.md"
+version = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+rust-version = { workspace = true }
+
+[lints]
+workspace = true
+
+[[example]]
+name = "flight_sql_server"
+path = "examples/flight/flight_sql_server.rs"
+
+[[example]]
+name = "flight_server"
+path = "examples/flight/flight_server.rs"
+
+[[example]]
+name = "flight_client"
+path = "examples/flight/flight_client.rs"
+
+[[example]]
+name = "dataframe_to_s3"
+path = "examples/external_dependency/dataframe-to-s3.rs"
+
+[[example]]
+name = "query_aws_s3"
+path = "examples/external_dependency/query-aws-s3.rs"
+
+[dev-dependencies]
+arrow = { workspace = true }
+arrow-flight = { workspace = true }
+arrow-schema = { workspace = true }
+async-trait = { workspace = true }
+bytes = { workspace = true }
+dashmap = { workspace = true }
+datafusion = { workspace = true, default-features = true, features = ["avro"] }
+datafusion-common = { workspace = true, default-features = true }
+datafusion-expr = { workspace = true }
+datafusion-functions-window-common = { workspace = true }
+datafusion-optimizer = { workspace = true, default-features = true }
+datafusion-physical-expr = { workspace = true, default-features = true }
+datafusion-proto = { workspace = true }
+datafusion-sql = { workspace = true }
+env_logger = { workspace = true }
+futures = { workspace = true }
+log = { workspace = true }
+mimalloc = { version = "0.1", default-features = false }
+num_cpus = { workspace = true }
+object_store = { workspace = true, features = ["aws", "http"] }
+prost = { workspace = true }
+prost-derive = { workspace = true }
+serde = { version = "1.0.136", features = ["derive"] }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+test-utils = { path = "../test-utils" }
+tokio = { workspace = true, features = ["rt-multi-thread", "parking_lot"] }
+tonic = "0.12.1"
+url = { workspace = true }
+uuid = "1.7"
+
+[target.'cfg(not(target_os = "windows"))'.dev-dependencies]
+nix = { version = "0.28.0", features = ["fs"] }

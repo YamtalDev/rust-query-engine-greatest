@@ -1,0 +1,855 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+
+#   http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+############################
+# Unnest Expressions Tests #
+############################
+
+statement ok
+CREATE TABLE unnest_table
+AS VALUES
+    ([1,2,3], [7], 1, [13, 14], struct(1,2)),
+    ([4,5], [8,9,10], 2, [15, 16], struct(3,4)),
+    ([6], [11,12], 3, null, null),
+    ([12], [null, 42, null], null, null, struct(7,8)),
+    -- null array to verify the `preserve_nulls` option
+    (null, null, 4, [17, 18], null)
+;
+
+statement ok
+CREATE TABLE nested_unnest_table
+AS VALUES 
+    (struct('a', 'b', struct('c')), (struct('a', 'b', [10,20])), [struct('a', 'b')]),
+    (struct('d', 'e', struct('f')), (struct('x', 'y', [30,40, 50])), null)
+;
+
+statement ok
+CREATE TABLE recursive_unnest_table
+AS VALUES 
+    (struct([1], 'a'), [[[1],[2]],[[1,1]]], [struct([1],[[1,2]])]),
+    (struct([2], 'b'), [[[3,4],[5]],[[null,6],null,[7,8]]], [struct([2],[[3],[4]])])
+;
+
+## Basic unnest expression in select list
+query I
+select unnest([1,2,3]);
+----
+1
+2
+3
+
+## Basic unnest expression in select struct
+query III
+select unnest(struct(1,2,3));
+----
+1 2 3
+
+## Basic unnest list expression in from clause
+query I
+select * from unnest([1,2,3]);
+----
+1
+2
+3
+
+## Basic unnest struct expression in from clause
+query III
+select * from unnest(struct(1,2,3));
+----
+1 2 3
+
+## Multiple unnest expression in from clause
+query IIII
+select * from unnest(struct(1,2,3)),unnest([4,5,6]);
+----
+1 2 3 4
+1 2 3 5
+1 2 3 6
+
+
+## Unnest null in select list
+query error DataFusion error: This feature is not implemented: unnest\(\) does not support null yet
+select unnest(null);
+
+## Unnest null in from clause
+query error DataFusion error: This feature is not implemented: unnest\(\) does not support null yet
+select * from unnest(null);
+
+
+## Unnest empty array in select list
+query I
+select unnest([]);
+----
+
+## Unnest empty array in from clause
+query I
+select * from unnest([]);
+----
+
+
+## Unnest column non-null
+query I
+select unnest(column1) from unnest_table;
+----
+1
+2
+3
+4
+5
+6
+12
+
+## Unnest column with null
+query I
+select unnest(column2) from unnest_table;
+----
+7
+8
+9
+10
+11
+12
+NULL
+42
+NULL
+
+## Unnest single column and filter out null lists
+query I
+select unnest(column2) from unnest_table where column2 is not null;
+----
+7
+8
+9
+10
+11
+12
+NULL
+42
+NULL
+
+## Unnest with additional column
+## Issue: https://github.com/apache/datafusion/issues/9349
+query II
+select unnest(column1), column3 from unnest_table;
+----
+1 1
+2 1
+3 1
+4 2
+5 2
+6 3
+12 NULL
+
+query I?
+select unnest(column1), column1 from unnest_table;
+----
+1 [1, 2, 3]
+2 [1, 2, 3]
+3 [1, 2, 3]
+4 [4, 5]
+5 [4, 5]
+6 [6]
+12 [12]
+
+# unnest at different level at the same time
+query II
+select unnest([1,2,3]), unnest(unnest([[1,2,3]]));
+----
+1 1
+2 2
+3 3
+
+# binary expr linking different unnest exprs
+query II
+select unnest([1,2,3]) + unnest([1,2,3]), unnest([1,2,3]) + unnest([4,5]);
+----
+2 5
+4 7
+6 NULL
+
+
+# binary expr linking different recursive unnest exprs
+query III
+select unnest(unnest([[1,2,3]])) + unnest(unnest([[1,2,3]])), unnest(unnest([[1,2,3]])) + unnest([4,5]), unnest([4,5]);
+----
+2 5 4
+4 7 5
+6 NULL NULL
+
+
+
+
+## unnest as children of other expr
+query I?
+select unnest(column1) + 1 , column1 from unnest_table;
+----
+2 [1, 2, 3]
+3 [1, 2, 3]
+4 [1, 2, 3]
+5 [4, 5]
+6 [4, 5]
+7 [6]
+13 [12]
+
+## unnest on multiple columns
+query II
+select unnest(column1), unnest(column2) from unnest_table;
+----
+1 7
+2 NULL
+3 NULL
+4 8
+5 9
+NULL 10
+6 11
+NULL 12
+12 NULL
+NULL 42
+NULL NULL
+
+query error DataFusion error: Error during planning: unnest\(\) can only be applied to array, struct and null
+select unnest('foo');
+
+query ?II
+select array_remove(column1, 4), unnest(column2), column3 * 10 from unnest_table;
+----
+[1, 2, 3] 7 10
+[5] 8 20
+[5] 9 20
+[5] 10 20
+[6] 11 30
+[6] 12 30
+[12] NULL NULL
+[12] 42 NULL
+[12] NULL NULL
+
+
+## Unnest doesn't work with untyped nulls
+query error DataFusion error: This feature is not implemented: unnest\(\) does not support null yet
+select unnest(null) from unnest_table;
+
+## Multiple unnest functions in selection
+query II
+select unnest([]), unnest(NULL::int[]);
+----
+
+query III
+select
+    unnest(column1),
+    unnest(arrow_cast(column2, 'LargeList(Int64)')),
+    unnest(arrow_cast(column4, 'FixedSizeList(2, Int64)'))
+from unnest_table where column4 is not null;
+----
+1 7 13
+2 NULL 14
+3 NULL NULL
+4 8 15
+5 9 16
+NULL 10 NULL
+NULL NULL 17
+NULL NULL 18
+
+query IIIT
+select 
+    unnest(column1), unnest(column2) + 2, 
+    column3 * 10, unnest(array_remove(column1, '4')) 
+from unnest_table;
+----
+1 9 10 1
+2 NULL 10 2
+3 NULL 10 3
+4 10 20 5
+5 11 20 NULL
+NULL 12 20 NULL
+6 13 30 6
+NULL 14 30 NULL
+12 NULL NULL 12
+NULL 44 NULL NULL
+NULL NULL NULL NULL
+
+## Unnest scalar in select list
+query error DataFusion error: Error during planning: unnest\(\) can only be applied to array, struct and null
+select unnest(1);
+
+## Unnest scalar in from clause
+query error DataFusion error: Error during planning: unnest\(\) can only be applied to array, struct and null
+select * from unnest(1);
+
+
+## Unnest empty expression in select list
+query error DataFusion error: Error during planning: unnest\(\) requires exactly one argument
+select unnest();
+
+## Unnest empty expression in from clause
+query error DataFusion error: SQL error: ParserError\("Expected: an expression:, found: \)"\)
+select * from unnest();
+
+
+## Unnest multiple expressions in select list. This form is only allowed in a query's FROM clause.
+query error DataFusion error: Error during planning: unnest\(\) requires exactly one argument
+select unnest([1,2], [2,3]);
+
+## Unnest multiple expressions in from clause
+query ITII
+select * from unnest(
+    [1,2],
+    arrow_cast(['a','b', 'c'], 'LargeList(Utf8)'),
+    arrow_cast([4, NULL], 'FixedSizeList(2, Int64)'),
+    NULL::int[]
+) as t(a, b, c, d);
+----
+1 a 4 NULL
+2 b NULL NULL
+NULL c NULL NULL
+
+query II
+select * from unnest([], NULL::int[]);
+----
+
+
+## Unnest struct expression in select list
+query ?
+select unnest(struct(null));
+----
+NULL
+
+## Unnest struct expression in from clause
+query ?
+select * from unnest(struct(null));
+----
+NULL
+
+
+## Unnest array expression
+query I
+select unnest(range(1, 3));
+----
+1
+2
+
+query I
+select * from unnest(range(1, 3));
+----
+1
+2
+
+query I
+select unnest(arrow_cast(range(1, 3), 'LargeList(Int64)'));
+----
+1
+2
+
+query I
+select * from unnest(arrow_cast(range(1, 3), 'LargeList(Int64)'));
+----
+1
+2
+
+query I
+select unnest(arrow_cast(range(1, 3), 'FixedSizeList(2, Int64)'));
+----
+1
+2
+
+query I
+select * from unnest(arrow_cast(range(1, 3), 'FixedSizeList(2, Int64)'));
+----
+1
+2
+
+query I
+select unnest(array_remove(column1, 12)) from unnest_table;
+----
+1
+2
+3
+4
+5
+6
+
+## unnest struct-typed column and list-typed column at the same time
+query I?II?
+select unnest(column1), column1, unnest(column5), column5 from unnest_table;
+----
+1 [1, 2, 3] 1 2 {c0: 1, c1: 2}
+2 [1, 2, 3] 1 2 {c0: 1, c1: 2}
+3 [1, 2, 3] 1 2 {c0: 1, c1: 2}
+4 [4, 5] 3 4 {c0: 3, c1: 4}
+5 [4, 5] 3 4 {c0: 3, c1: 4}
+6 [6] NULL NULL NULL
+12 [12] 7 8 {c0: 7, c1: 8}
+
+
+## Unnest in from clause with alias
+query I
+select * from unnest([1,2]) as t;
+----
+1
+2
+
+query I
+select a from unnest([1,2]) as t(a);
+----
+1
+2
+
+
+## Unnest in from clause with offset is not supported
+query error DataFusion error: This feature is not implemented: UNNEST table factor with offset is not supported yet
+select * from unnest([1,2]) with offset;
+
+query error DataFusion error: This feature is not implemented: UNNEST table factor with offset is not supported yet
+select * from unnest([1,2]) with offset offset_alias;
+
+
+## More complex cases
+query I
+select * from unnest([1,2,(select sum(column3) from unnest_table)]);
+----
+1
+2
+10
+
+## Unnest is the sub-expression of other expression
+query II
+select unnest(column1) as a, column3 from unnest_table;
+----
+1 1
+2 1
+3 1
+4 2
+5 2
+6 3
+12 NULL
+
+query BI
+select unnest(column1) is not null, column3 from unnest_table;
+----
+true 1
+true 1
+true 1
+true 2
+true 2
+true 3
+true NULL
+
+query II
+select -unnest(column1) as a, column3 from unnest_table;
+----
+-1 1
+-2 1
+-3 1
+-4 2
+-5 2
+-6 3
+-12 NULL
+
+query II
+select unnest(array_remove(column1, 3)) as a, column3 from unnest_table;
+----
+1 1
+2 1
+4 2
+5 2
+6 3
+12 NULL
+
+query II
+select unnest(array_remove(column1, 3)) as c1, column3 from unnest_table order by c1 desc, column3;
+----
+12 NULL
+6 3
+5 2
+4 2
+2 1
+1 1
+
+query II
+select unnest(array_remove(column1, 3)) - 1 as c1, column3 from unnest_table;
+----
+0 1
+1 1
+3 2
+4 2
+5 3
+11 NULL
+
+## unnest on nested(list(struct))
+query ?
+select unnest(column3) as struct_elem from nested_unnest_table;
+----
+{c0: a, c1: b}
+
+## unnest for nested struct(struct)
+query TT?
+select unnest(column1) from nested_unnest_table;
+----
+a b {c0: c}
+d e {c0: f}
+
+## unnest for nested(struct(list))
+query TT?
+select unnest(column2) from nested_unnest_table;
+----
+a b [10, 20]
+x y [30, 40, 50]
+
+query error DataFusion error: type_coercion\ncaused by\nThis feature is not implemented: Unnest should be rewritten to LogicalPlan::Unnest before type coercion
+select sum(unnest(generate_series(1,10)));
+
+query error DataFusion error: Internal error: unnest on struct can only be applied at the root level of select expression
+select arrow_typeof(unnest(column5)) from unnest_table;
+
+query T
+select arrow_typeof(unnest(column1)) from unnest_table;
+----
+Int64
+Int64
+Int64
+Int64
+Int64
+Int64
+Int64
+
+## unnest from a result of a logical plan with limit and offset
+query I
+select unnest(column1) from (select * from (values([1,2,3]), ([4,5,6])) limit 1 offset 1);
+----
+4
+5
+6
+
+query error DataFusion error: Error during planning: Projections require unique expression names but the expression "UNNEST\(unnest_table.column1\)" at position 0 and "UNNEST\(unnest_table.column1\)" at position 1 have the same name. Consider aliasing \("AS"\) one of them.
+select unnest(column1), unnest(column1) from unnest_table;
+
+query II
+select unnest(column1), unnest(column1) u1 from unnest_table;
+----
+1 1
+2 2
+3 3
+4 4
+5 5
+6 6
+12 12
+
+## the same unnest expr is referened multiple times (unnest is the bottom-most expr)
+query ??II
+select unnest(column2), unnest(unnest(column2)), unnest(unnest(unnest(column2))), unnest(unnest(unnest(column2))) + 1 from recursive_unnest_table;
+----
+[[1], [2]] [1] 1 2
+[[1, 1]] [2] NULL NULL
+[[1], [2]] [1, 1] 2 3
+[[1, 1]] NULL NULL NULL
+[[1], [2]] [1] 1 2
+[[1, 1]] [2] 1 2
+[[1], [2]] [1, 1] NULL NULL
+[[1, 1]] NULL NULL NULL
+[[3, 4], [5]] [3, 4] 3 4
+[[, 6], , [7, 8]] [5] 4 5
+[[3, 4], [5]] [, 6] 5 6
+[[, 6], , [7, 8]] NULL NULL NULL
+NULL [7, 8] NULL NULL
+[[3, 4], [5]] [3, 4] NULL NULL
+[[, 6], , [7, 8]] [5] 6 7
+[[3, 4], [5]] [, 6] NULL NULL
+[[, 6], , [7, 8]] NULL NULL NULL
+NULL [7, 8] NULL NULL
+[[3, 4], [5]] NULL 7 8
+[[, 6], , [7, 8]] NULL 8 9
+
+## the same composite expr (unnest(field_access(unnest(col)))) which containing unnest is referened multiple times
+query ??II
+select unnest(column3), unnest(column3)['c0'], unnest(unnest(column3)['c0']), unnest(unnest(column3)['c0']) + unnest(unnest(column3)['c0'])  from recursive_unnest_table;
+----
+{c0: [1], c1: [[1, 2]]} [1] 1 2
+{c0: [2], c1: [[3], [4]]} [2] 2 4
+
+
+
+
+## unnest list followed by unnest struct
+query ???
+select unnest(unnest(column3)), column3 from recursive_unnest_table;
+----
+[1] [[1, 2]] [{c0: [1], c1: [[1, 2]]}]
+[2] [[3], [4]] [{c0: [2], c1: [[3], [4]]}]
+
+
+query TT
+explain select unnest(unnest(column3)), column3 from recursive_unnest_table;
+----
+logical_plan
+01)Unnest: lists[] structs[unnest_placeholder(UNNEST(recursive_unnest_table.column3))]
+02)--Projection: unnest_placeholder(recursive_unnest_table.column3,depth=1) AS UNNEST(recursive_unnest_table.column3) AS unnest_placeholder(UNNEST(recursive_unnest_table.column3)), recursive_unnest_table.column3
+03)----Unnest: lists[unnest_placeholder(recursive_unnest_table.column3)|depth=1] structs[]
+04)------Projection: recursive_unnest_table.column3 AS unnest_placeholder(recursive_unnest_table.column3), recursive_unnest_table.column3
+05)--------TableScan: recursive_unnest_table projection=[column3]
+physical_plan
+01)UnnestExec
+02)--RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+03)----ProjectionExec: expr=[unnest_placeholder(recursive_unnest_table.column3,depth=1)@0 as unnest_placeholder(UNNEST(recursive_unnest_table.column3)), column3@1 as column3]
+04)------UnnestExec
+05)--------ProjectionExec: expr=[column3@0 as unnest_placeholder(recursive_unnest_table.column3), column3@0 as column3]
+06)----------MemoryExec: partitions=1, partition_sizes=[1]
+
+## unnest->field_access->unnest->unnest
+query I?
+select unnest(unnest(unnest(column3)['c1'])), column3 from recursive_unnest_table;
+----
+1 [{c0: [1], c1: [[1, 2]]}]
+2 [{c0: [1], c1: [[1, 2]]}]
+3 [{c0: [2], c1: [[3], [4]]}]
+4 [{c0: [2], c1: [[3], [4]]}]
+
+## triple list unnest
+query I?
+select unnest(unnest(unnest(column2))), column2 from recursive_unnest_table;
+----
+1 [[[1], [2]], [[1, 1]]]
+2 [[[1], [2]], [[1, 1]]]
+1 [[[1], [2]], [[1, 1]]]
+1 [[[1], [2]], [[1, 1]]]
+3 [[[3, 4], [5]], [[, 6], , [7, 8]]]
+4 [[[3, 4], [5]], [[, 6], , [7, 8]]]
+5 [[[3, 4], [5]], [[, 6], , [7, 8]]]
+NULL [[[3, 4], [5]], [[, 6], , [7, 8]]]
+6 [[[3, 4], [5]], [[, 6], , [7, 8]]]
+7 [[[3, 4], [5]], [[, 6], , [7, 8]]]
+8 [[[3, 4], [5]], [[, 6], , [7, 8]]]
+
+
+query I??
+select unnest(unnest(unnest(column3)['c1'])), unnest(unnest(column3)['c1']), column3 from recursive_unnest_table;
+----
+1 [1, 2] [{c0: [1], c1: [[1, 2]]}]
+2 NULL [{c0: [1], c1: [[1, 2]]}]
+3 [3] [{c0: [2], c1: [[3], [4]]}]
+NULL [4] [{c0: [2], c1: [[3], [4]]}]
+4 [3] [{c0: [2], c1: [[3], [4]]}]
+NULL [4] [{c0: [2], c1: [[3], [4]]}]
+
+## demonstrate where recursive unnest is impossible 
+## and need multiple unnesting logical plans
+## e.g unnest -> field_access -> unnest
+query TT
+explain select unnest(unnest(unnest(column3)['c1'])), column3 from recursive_unnest_table;
+----
+logical_plan
+01)Projection: unnest_placeholder(UNNEST(recursive_unnest_table.column3)[c1],depth=2) AS UNNEST(UNNEST(UNNEST(recursive_unnest_table.column3)[c1])), recursive_unnest_table.column3
+02)--Unnest: lists[unnest_placeholder(UNNEST(recursive_unnest_table.column3)[c1])|depth=2] structs[]
+03)----Projection: get_field(unnest_placeholder(recursive_unnest_table.column3,depth=1) AS UNNEST(recursive_unnest_table.column3), Utf8("c1")) AS unnest_placeholder(UNNEST(recursive_unnest_table.column3)[c1]), recursive_unnest_table.column3
+04)------Unnest: lists[unnest_placeholder(recursive_unnest_table.column3)|depth=1] structs[]
+05)--------Projection: recursive_unnest_table.column3 AS unnest_placeholder(recursive_unnest_table.column3), recursive_unnest_table.column3
+06)----------TableScan: recursive_unnest_table projection=[column3]
+physical_plan
+01)ProjectionExec: expr=[unnest_placeholder(UNNEST(recursive_unnest_table.column3)[c1],depth=2)@0 as UNNEST(UNNEST(UNNEST(recursive_unnest_table.column3)[c1])), column3@1 as column3]
+02)--UnnestExec
+03)----ProjectionExec: expr=[get_field(unnest_placeholder(recursive_unnest_table.column3,depth=1)@0, c1) as unnest_placeholder(UNNEST(recursive_unnest_table.column3)[c1]), column3@1 as column3]
+04)------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+05)--------UnnestExec
+06)----------ProjectionExec: expr=[column3@0 as unnest_placeholder(recursive_unnest_table.column3), column3@0 as column3]
+07)------------MemoryExec: partitions=1, partition_sizes=[1]
+
+
+
+## group by unnest
+
+### without agg exprs
+query I
+select unnest(column1) c1 from unnest_table group by c1 order by c1;
+----
+1
+2
+3
+4
+5
+6
+12
+
+query II
+select unnest(column1) c1, unnest(column2) c2 from unnest_table group by c1, c2 order by c1, c2;
+----
+1 7
+2 NULL
+3 NULL
+4 8
+5 9
+6 11
+12 NULL
+NULL 10
+NULL 12
+NULL 42
+NULL NULL
+
+query III
+select unnest(column1) c1, unnest(column2) c2, column3 c3 from unnest_table group by c1, c2, c3 order by c1, c2, c3;
+----
+1 7 1
+2 NULL 1
+3 NULL 1
+4 8 2
+5 9 2
+6 11 3
+12 NULL NULL
+NULL 10 2
+NULL 12 3
+NULL 42 NULL
+NULL NULL NULL
+
+### with agg exprs
+
+query IIII
+select unnest(column1) c1, unnest(column2) c2, column3 c3, count(1) from unnest_table group by c1, c2, c3 order by c1, c2, c3;
+----
+1 7 1 1
+2 NULL 1 1
+3 NULL 1 1
+4 8 2 1
+5 9 2 1
+6 11 3 1
+12 NULL NULL 1
+NULL 10 2 1
+NULL 12 3 1
+NULL 42 NULL 1
+NULL NULL NULL 1
+
+query IIII
+select unnest(column1) c1, unnest(column2) c2, column3 c3, count(column4) from unnest_table group by c1, c2, c3 order by c1, c2, c3;
+----
+1 7 1 1
+2 NULL 1 1
+3 NULL 1 1
+4 8 2 1
+5 9 2 1
+6 11 3 0
+12 NULL NULL 0
+NULL 10 2 1
+NULL 12 3 0
+NULL 42 NULL 0
+NULL NULL NULL 0
+
+query IIIII
+select unnest(column1) c1, unnest(column2) c2, column3 c3, count(column4), sum(column3) from unnest_table group by c1, c2, c3 order by c1, c2, c3;
+----
+1 7 1 1 1
+2 NULL 1 1 1
+3 NULL 1 1 1
+4 8 2 1 2
+5 9 2 1 2
+6 11 3 0 3
+12 NULL NULL 0 NULL
+NULL 10 2 1 2
+NULL 12 3 0 3
+NULL 42 NULL 0 NULL
+NULL NULL NULL 0 NULL
+
+query II
+select unnest(column1), count(*) from unnest_table group by unnest(column1) order by unnest(column1) desc;
+----
+12 1
+6 1
+5 1
+4 1
+3 1
+2 1
+1 1
+
+### group by recursive unnest list
+
+query ?
+select unnest(unnest(column2)) c2 from recursive_unnest_table group by c2 order by c2;
+----
+[1]
+[1, 1]
+[2]
+[3, 4]
+[5]
+[7, 8]
+[, 6]
+NULL
+
+query ?I
+select unnest(unnest(column2)) c2, count(column3) from recursive_unnest_table group by c2 order by c2;
+----
+[1] 1
+[1, 1] 1
+[2] 1
+[3, 4] 1
+[5] 1
+[7, 8] 1
+[, 6] 1
+NULL 1
+
+query error DataFusion error: Error during planning: Projection references non\-aggregate values
+select unnest(column1) c1 from nested_unnest_table group by c1.c0;
+
+# TODO: this query should work. see issue: https://github.com/apache/datafusion/issues/12794
+query error DataFusion error: Internal error: unnest on struct can only be applied at the root level of select expression
+select unnest(column1) c1 from nested_unnest_table
+
+query II??I??
+select unnest(column5), * from unnest_table;
+----
+1 2 [1, 2, 3] [7] 1 [13, 14] {c0: 1, c1: 2}
+3 4 [4, 5] [8, 9, 10] 2 [15, 16] {c0: 3, c1: 4}
+NULL NULL [6] [11, 12] 3 NULL NULL
+7 8 [12] [, 42, ] NULL NULL {c0: 7, c1: 8}
+NULL NULL NULL NULL 4 [17, 18] NULL
+
+query TT????
+select unnest(column1), * from nested_unnest_table
+----
+a b {c0: c} {c0: a, c1: b, c2: {c0: c}} {c0: a, c1: b, c2: [10, 20]} [{c0: a, c1: b}]
+d e {c0: f} {c0: d, c1: e, c2: {c0: f}} {c0: x, c1: y, c2: [30, 40, 50]} NULL
+
+query ?????
+select unnest(unnest(column3)), * from recursive_unnest_table
+----
+[1] [[1, 2]] {c0: [1], c1: a} [[[1], [2]], [[1, 1]]] [{c0: [1], c1: [[1, 2]]}]
+[2] [[3], [4]] {c0: [2], c1: b} [[[3, 4], [5]], [[, 6], , [7, 8]]] [{c0: [2], c1: [[3], [4]]}]
+
+statement ok
+CREATE TABLE join_table
+AS VALUES
+    (1, 2, 3),
+    (2, 3, 4),
+    (4, 5, 6)
+;
+
+query IIIII
+select unnest(u.column5), j.* from unnest_table u join join_table j on u.column3 = j.column1
+----
+1 2 1 2 3
+3 4 2 3 4
+NULL NULL 4 5 6
+
+query II?I?
+select unnest(column5), * except (column5, column1) from unnest_table;
+----
+1 2 [7] 1 [13, 14]
+3 4 [8, 9, 10] 2 [15, 16]
+NULL NULL [11, 12] 3 NULL
+7 8 [, 42, ] NULL NULL
+NULL NULL NULL 4 [17, 18]
+
+query III
+select unnest(u.column5), j.* except(column2, column3) from unnest_table u join join_table j on u.column3 = j.column1
+----
+1 2 1
+3 4 2
+NULL NULL 4
