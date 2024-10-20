@@ -1,10 +1,6 @@
 import greatest
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import greatest as spark_greatest
-import sys
-print(sys.executable)
-
-# Rest of the script...
 
 def test_greatest():
     # Initialize Spark
