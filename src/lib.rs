@@ -3,8 +3,9 @@ use datafusion_functions_nested::greatest::greatest_inner;
 use pyo3::prelude::*;
 use std::sync::Arc;
 
+/// PyO3 wrapper function to execute the greatest query.
 #[pyfunction]
-fn run_greatest_query(input: Vec<Vec<i32>>) -> PyResult<Vec<i32>> {
+fn run_greatest_query(input: Vec<Vec<i32>>) -> PyResult<Vec<Option<i32>>> {
     // Convert input to ArrayRefs
     let arrays: Vec<ArrayRef> = input
         .iter()
@@ -12,8 +13,12 @@ fn run_greatest_query(input: Vec<Vec<i32>>) -> PyResult<Vec<i32>> {
         .collect();
 
     // Compute greatest
-    let greatest_array = greatest_inner(&arrays)
-        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?;
+    let greatest_array = greatest_inner(&arrays).map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+            "Error computing greatest: {}",
+            e
+        ))
+    })?;
 
     // Downcast to Int32Array
     let greatest_int_array = greatest_array
@@ -23,21 +28,23 @@ fn run_greatest_query(input: Vec<Vec<i32>>) -> PyResult<Vec<i32>> {
             PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Failed to downcast to Int32Array")
         })?;
 
-    // Collect results
-    let mut result = Vec::new();
-    for i in 0..greatest_int_array.len() {
-        if greatest_int_array.is_null(i) {
-            result.push(0); // Or handle nulls appropriately
-        } else {
-            result.push(greatest_int_array.value(i));
-        }
-    }
+    // Collect results with proper handling of nulls
+    let result = (0..greatest_int_array.len())
+        .map(|i| {
+            if greatest_int_array.is_null(i) {
+                None
+            } else {
+                Some(greatest_int_array.value(i))
+            }
+        })
+        .collect();
 
     Ok(result)
 }
 
+/// PyO3 module definition.
 #[pymodule]
-fn greatest(_py: Python, m: &PyModule) -> PyResult<()> {
+fn greatest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_greatest_query, m)?)?;
     Ok(())
 }

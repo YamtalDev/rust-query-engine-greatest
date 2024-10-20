@@ -535,8 +535,8 @@ mod tests {
     fn test_greatest_with_nulls() -> Result<()> {
         let input_int = vec![
             Arc::new(Int32Array::from(vec![None, None, None])) as ArrayRef,
-            Arc::new(Int32Array::from(vec![None, 2, None])) as ArrayRef,
-            Arc::new(Int32Array::from(vec![None, None, 3])) as ArrayRef,
+            Arc::new(Int32Array::from(vec![None, Some(2), None])) as ArrayRef,
+            Arc::new(Int32Array::from(vec![None, None, Some(3)])) as ArrayRef,
         ];
 
         let greatest = greatest_inner(&input_int)?;
@@ -545,7 +545,7 @@ mod tests {
             .downcast_ref::<Int32Array>()
             .expect("Failed to downcast to Int32Array");
 
-        let expected = Int32Array::from(vec![None, 2, 3]);
+        let expected = Int32Array::from(vec![None, Some(2), Some(3)]);
         assert_eq!(greatest_int, &expected);
 
         Ok(())
