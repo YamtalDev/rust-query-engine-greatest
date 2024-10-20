@@ -4,7 +4,7 @@ use arrow::array::*;
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use datafusion_common::Result;
-use datafusion_greatest::greatest::greatest_inner;
+use datafusion_functions_nested::greatest::greatest_inner;
 use std::sync::Arc;
 
 #[tokio::test]
