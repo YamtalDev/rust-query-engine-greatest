@@ -1,6 +1,0 @@
-{
-    "python.analysis.extraPaths": [
-        "./spark/python"
-    ],
-    "java.compile.nullAnalysis.mode": "automatic"
-}
