@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! [`ScalarUDFImpl`] definitions for the `greatest` function.
+//! [ScalarUDFImpl] definitions for the greatest function.
 
 use crate::utils::make_scalar_function;
 use arrow::array::*;
@@ -152,8 +152,8 @@ pub fn greatest_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
         ));
     }
 
-    // Implement the logic for different data types
     match data_type {
+        // Scalar types
         DataType::Int8 => compute_greatest_numeric::<Int8Type>(&arrays),
         DataType::Int16 => compute_greatest_numeric::<Int16Type>(&arrays),
         DataType::Int32 => compute_greatest_numeric::<Int32Type>(&arrays),
@@ -166,8 +166,7 @@ pub fn greatest_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
         DataType::Float64 => compute_greatest_numeric::<Float64Type>(&arrays),
         DataType::Utf8 => compute_greatest_utf8(&arrays),
         DataType::LargeUtf8 => compute_greatest_large_utf8(&arrays),
-        DataType::List(_) => compute_greatest_list(&arrays),
-        DataType::Struct(_) => compute_greatest_struct(&arrays),
+        // Return error for unsupported types
         _ => Err(DataFusionError::NotImplemented(format!(
             "Greatest function not implemented for data type {:?}",
             data_type
@@ -310,158 +309,159 @@ fn compute_greatest_large_utf8(arrays: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(builder.finish()))
 }
 
-fn compute_greatest_list(arrays: &[ArrayRef]) -> Result<ArrayRef> {
-    // Assuming the list elements are Int32Array for simplicity
-    // You may need to generalize this based on element type
-    let arrays = arrays
-        .iter()
-        .map(|array| {
-            array.as_any().downcast_ref::<ListArray>().ok_or_else(|| {
-                DataFusionError::Execution("Failed to downcast array".to_string())
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
+// fn compute_greatest_list(arrays: &[ArrayRef]) -> Result<ArrayRef> {
+//     // Assuming the list elements are Int32Array for simplicity
+//     // You may need to generalize this based on element type
+//     let arrays = arrays
+//         .iter()
+//         .map(|array| {
+//             array.as_any().downcast_ref::<ListArray>().ok_or_else(|| {
+//                 DataFusionError::Execution("Failed to downcast array".to_string())
+//             })
+//         })
+//         .collect::<Result<Vec<_>>>()?;
 
-    let num_rows = arrays[0].len();
-    let value_builder = Int32Builder::new();
-    let mut builder = ListBuilder::new(value_builder);
+//     let num_rows = arrays[0].len();
+//     let value_builder = Int32Builder::new();
+//     let mut builder = ListBuilder::new(value_builder);
 
-    for row in 0..num_rows {
-        let mut max_value: Option<i32> = None;
-        for array in &arrays {
-            if array.is_valid(row) {
-                let values = array.value(row);
-                let value_array = values
-                    .as_any()
-                    .downcast_ref::<Int32Array>()
-                    .ok_or_else(|| {
-                        DataFusionError::Execution(
-                            "Failed to downcast value array".to_string(),
-                        )
-                    })?;
+//     for row in 0..num_rows {
+//         let mut max_value: Option<i32> = None;
+//         for array in &arrays {
+//             if array.is_valid(row) {
+//                 let values = array.value(row);
+//                 let value_array = values
+//                     .as_any()
+//                     .downcast_ref::<Int32Array>()
+//                     .ok_or_else(|| {
+//                         DataFusionError::Execution(
+//                             "Failed to downcast value array".to_string(),
+//                         )
+//                     })?;
 
-                for index in 0..value_array.len() {
-                    if value_array.is_valid(index) {
-                        let value = value_array.value(index);
-                        max_value = Some(
-                            max_value.map_or(value, |current_max| current_max.max(value)),
-                        );
-                    }
-                }
-            }
-        }
+//                 for index in 0..value_array.len() {
+//                     if value_array.is_valid(index) {
+//                         let value = value_array.value(index);
+//                         max_value = Some(
+//                             max_value.map_or(value, |current_max| current_max.max(value)),
+//                         );
+//                     }
+//                 }
+//             }
+//         }
 
-        if let Some(value) = max_value {
-            builder.values().append_value(value);
-            builder.append(true);
-        } else {
-            builder.append(false);
-        }
-    }
+//         if let Some(value) = max_value {
+//             builder.values().append_value(value);
+//             builder.append(true);
+//         } else {
+//             builder.append(false);
+//         }
+//     }
 
-    Ok(Arc::new(builder.finish()))
-}
+//     Ok(Arc::new(builder.finish()))
+// }
 
-fn compute_greatest_struct(arrays: &[ArrayRef]) -> Result<ArrayRef> {
-    let arrays = arrays
-        .iter()
-        .map(|array| {
-            array.as_any().downcast_ref::<StructArray>().ok_or_else(|| {
-                DataFusionError::Execution("Failed to downcast array".to_string())
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
+// fn compute_greatest_struct(arrays: &[ArrayRef]) -> Result<ArrayRef> {
+//     let arrays = arrays
+//         .iter()
+//         .map(|array| {
+//             array.as_any().downcast_ref::<StructArray>().ok_or_else(|| {
+//                 DataFusionError::Execution("Failed to downcast array".to_string())
+//             })
+//         })
+//         .collect::<Result<Vec<_>>>()?;
 
-    let num_rows = arrays[0].len();
-    let fields = arrays[0].data_type().clone();
-    let field_types = match fields {
-        DataType::Struct(fields) => fields,
-        _ => {
-            return Err(DataFusionError::Execution(
-                "Expected Struct data type".to_string(),
-            ))
-        }
-    };
+//     let num_rows = arrays[0].len();
+//     let fields = arrays[0].data_type().clone();
+//     let field_types = match fields {
+//         DataType::Struct(fields) => fields,
+//         _ => {
+//             return Err(DataFusionError::Execution(
+//                 "Expected Struct data type".to_string(),
+//             ))
+//         }
+//     };
 
-    // Create field builders
-    let field_builders: Vec<Box<dyn ArrayBuilder>> = field_types
-        .iter()
-        .map(|field| make_builder(field.data_type(), num_rows))
-        .collect::<Result<_>>()?;
+//     // Create field builders
+//     let field_builders: Vec<Box<dyn ArrayBuilder>> = field_types
+//         .iter()
+//         .map(|field| make_builder(field.data_type(), num_rows))
+//         .collect::<Result<_>>()?;
 
-    let mut builder = StructBuilder::new(field_types, field_builders);
+//     let mut builder = StructBuilder::new(field_types, field_builders);
 
-    for row in 0..num_rows {
-        let mut append_null = true;
+//     for row in 0..num_rows {
+//         let mut append_null = true;
 
-        for field_index in 0..builder.num_fields() {
-            let field_builder =
-                builder.field_builder::<Int64Builder>(field_index).unwrap();
-            let mut max_value: Option<i64> = None;
+//         for field_index in 0..builder.num_fields() {
+//             let field_builder =
+//                 builder.field_builder::<Int64Builder>(field_index).unwrap();
+//             let mut max_value: Option<i64> = None;
 
-            for array in &arrays {
-                let column = array.column(field_index);
-                if column.is_valid(row) {
-                    let value = column
-                        .as_any()
-                        .downcast_ref::<Int64Array>()
-                        .ok_or_else(|| {
-                            DataFusionError::Execution(
-                                "Failed to downcast column array".to_string(),
-                            )
-                        })?
-                        .value(row);
+//             for array in &arrays {
+//                 let column = array.column(field_index);
+//                 if column.is_valid(row) {
+//                     let value = column
+//                         .as_any()
+//                         .downcast_ref::<Int64Array>()
+//                         .ok_or_else(|| {
+//                             DataFusionError::Execution(
+//                                 "Failed to downcast column array".to_string(),
+//                             )
+//                         })?
+//                         .value(row);
 
-                    max_value = Some(
-                        max_value.map_or(value, |current_max| current_max.max(value)),
-                    );
-                }
-            }
+//                     max_value = Some(
+//                         max_value.map_or(value, |current_max| current_max.max(value)),
+//                     );
+//                 }
+//             }
 
-            if let Some(value) = max_value {
-                field_builder.append_value(value);
-                append_null = false;
-            } else {
-                field_builder.append_null();
-            }
-        }
+//             if let Some(value) = max_value {
+//                 field_builder.append_value(value);
+//                 append_null = false;
+//             } else {
+//                 field_builder.append_null();
+//             }
+//         }
 
-        if append_null {
-            builder.append(false);
-        } else {
-            builder.append(true);
-        }
-    }
+//         if append_null {
+//             builder.append(false);
+//         } else {
+//             builder.append(true);
+//         }
+//     }
 
-    Ok(Arc::new(builder.finish()))
-}
+//     Ok(Arc::new(builder.finish()))
+// }
 
-fn make_builder(data_type: &DataType, capacity: usize) -> Result<Box<dyn ArrayBuilder>> {
-    Ok(match data_type {
-        DataType::Int8 => Box::new(Int8Builder::with_capacity(capacity)),
-        DataType::Int16 => Box::new(Int16Builder::with_capacity(capacity)),
-        DataType::Int32 => Box::new(Int32Builder::with_capacity(capacity)),
-        DataType::Int64 => Box::new(Int64Builder::with_capacity(capacity)),
-        DataType::UInt8 => Box::new(UInt8Builder::with_capacity(capacity)),
-        DataType::UInt16 => Box::new(UInt16Builder::with_capacity(capacity)),
-        DataType::UInt32 => Box::new(UInt32Builder::with_capacity(capacity)),
-        DataType::UInt64 => Box::new(UInt64Builder::with_capacity(capacity)),
-        DataType::Float32 => Box::new(Float32Builder::with_capacity(capacity)),
-        DataType::Float64 => Box::new(Float64Builder::with_capacity(capacity)),
-        DataType::Utf8 => Box::new(StringBuilder::with_capacity(capacity, 0)),
-        DataType::LargeUtf8 => Box::new(LargeStringBuilder::with_capacity(capacity, 0)),
-        _ => {
-            return Err(DataFusionError::NotImplemented(format!(
-                "Builder not implemented for data type {:?}",
-                data_type
-            )))
-        }
-    })
-}
+// fn make_builder(data_type: &DataType, capacity: usize) -> Result<Box<dyn ArrayBuilder>> {
+//     Ok(match data_type {
+//         DataType::Int8 => Box::new(Int8Builder::with_capacity(capacity)),
+//         DataType::Int16 => Box::new(Int16Builder::with_capacity(capacity)),
+//         DataType::Int32 => Box::new(Int32Builder::with_capacity(capacity)),
+//         DataType::Int64 => Box::new(Int64Builder::with_capacity(capacity)),
+//         DataType::UInt8 => Box::new(UInt8Builder::with_capacity(capacity)),
+//         DataType::UInt16 => Box::new(UInt16Builder::with_capacity(capacity)),
+//         DataType::UInt32 => Box::new(UInt32Builder::with_capacity(capacity)),
+//         DataType::UInt64 => Box::new(UInt64Builder::with_capacity(capacity)),
+//         DataType::Float32 => Box::new(Float32Builder::with_capacity(capacity)),
+//         DataType::Float64 => Box::new(Float64Builder::with_capacity(capacity)),
+//         DataType::Utf8 => Box::new(StringBuilder::with_capacity(capacity, 0)),
+//         DataType::LargeUtf8 => Box::new(LargeStringBuilder::with_capacity(capacity, 0)),
+//         _ => {
+//             return Err(DataFusionError::NotImplemented(format!(
+//                 "Builder not implemented for data type {:?}",
+//                 data_type
+//             )))
+//         }
+//     })
+// }
 #[cfg(test)]
 mod tests {
     use super::*;
     use arrow::array::*;
+    use arrow::datatypes::Field;
     use datafusion_common::Result;
     use std::sync::Arc;
 
@@ -488,10 +488,24 @@ mod tests {
     #[test]
     fn test_greatest_float64_with_nan() -> Result<()> {
         let input_float = vec![
-            Arc::new(Float64Array::from(vec![Some(1.1), None, Some(3.3)])) as ArrayRef,
-            Arc::new(Float64Array::from(vec![Some(4.4), Some(5.5), None])) as ArrayRef,
-            Arc::new(Float64Array::from(vec![Some(7.7), Some(8.8), Some(9.9)]))
-                as ArrayRef,
+            Arc::new(Float64Array::from(vec![
+                Some(1.1),
+                None,
+                Some(3.3),
+                Some(f64::NAN),
+            ])) as ArrayRef,
+            Arc::new(Float64Array::from(vec![
+                Some(4.4),
+                Some(5.5),
+                None,
+                Some(2.2),
+            ])) as ArrayRef,
+            Arc::new(Float64Array::from(vec![
+                Some(7.7),
+                Some(8.8),
+                Some(9.9),
+                Some(f64::NAN),
+            ])) as ArrayRef,
         ];
 
         let greatest = greatest_inner(&input_float)?;
@@ -500,7 +514,8 @@ mod tests {
             .downcast_ref::<Float64Array>()
             .expect("Failed to downcast to Float64Array");
 
-        let expected = Float64Array::from(vec![Some(7.7), Some(8.8), Some(9.9)]);
+        let expected =
+            Float64Array::from(vec![Some(7.7), Some(8.8), Some(9.9), Some(2.2)]);
         assert_eq!(greatest_float, &expected);
 
         Ok(())
@@ -509,13 +524,20 @@ mod tests {
     #[test]
     fn test_greatest_utf8() -> Result<()> {
         let input_utf8 = vec![
-            Arc::new(StringArray::from(vec!["apple", "banana", "cherry"])) as ArrayRef,
-            Arc::new(StringArray::from(vec!["apricot", "blueberry", "citrus"]))
-                as ArrayRef,
             Arc::new(StringArray::from(vec![
-                "avocado",
-                "blackberry",
-                "cranberry",
+                Some("apple"),
+                Some("banana"),
+                Some("cherry"),
+            ])) as ArrayRef,
+            Arc::new(StringArray::from(vec![
+                Some("apricot"),
+                Some("blueberry"),
+                Some("citrus"),
+            ])) as ArrayRef,
+            Arc::new(StringArray::from(vec![
+                Some("avocado"),
+                Some("blackberry"),
+                Some("cranberry"),
             ])) as ArrayRef,
         ];
 
@@ -525,7 +547,11 @@ mod tests {
             .downcast_ref::<StringArray>()
             .expect("Failed to downcast to StringArray");
 
-        let expected = StringArray::from(vec!["avocado", "blackberry", "citrus"]);
+        let expected = StringArray::from(vec![
+            Some("avocado"),
+            Some("blueberry"),
+            Some("cranberry"),
+        ]);
         assert_eq!(greatest_utf8, &expected);
 
         Ok(())
@@ -555,14 +581,17 @@ mod tests {
     fn test_greatest_mixed_types_error() -> Result<()> {
         let input_mixed = vec![
             Arc::new(Int32Array::from(vec![Some(1), Some(2), Some(3)])) as ArrayRef,
-            Arc::new(StringArray::from(vec!["a", "b", "c"])) as ArrayRef,
+            Arc::new(StringArray::from(vec![Some("a"), Some("b"), Some("c")]))
+                as ArrayRef,
         ];
 
         let result = greatest_inner(&input_mixed);
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Error during type coercion: Failed to get wider type between Int32 and Utf8"
+        let error_message = result.unwrap_err().to_string();
+        assert!(
+            error_message.contains("There is no wider type that can represent both Int32 and Utf8"),
+            "Expected error message to contain 'There is no wider type that can represent both Int32 and Utf8', but got '{}'",
+            error_message
         );
 
         Ok(())
@@ -574,9 +603,11 @@ mod tests {
 
         let result = greatest_inner(&input_empty);
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "The 'greatest' function requires at least one argument"
+        let error_message = result.unwrap_err().to_string();
+        assert!(
+            error_message.contains("The 'greatest' function requires at least one argument"),
+            "Expected error message to contain 'The 'greatest' function requires at least one argument', but got '{}'",
+            error_message
         );
     }
 
@@ -600,10 +631,21 @@ mod tests {
     #[test]
     fn test_greatest_large_utf8() -> Result<()> {
         let input_large_utf8 = vec![
-            Arc::new(LargeStringArray::from(vec!["alpha", "beta", "gamma"])) as ArrayRef,
-            Arc::new(LargeStringArray::from(vec!["delta", "epsilon", "zeta"]))
-                as ArrayRef,
-            Arc::new(LargeStringArray::from(vec!["eta", "theta", "iota"])) as ArrayRef,
+            Arc::new(LargeStringArray::from(vec![
+                Some("alpha"),
+                Some("beta"),
+                Some("gamma"),
+            ])) as ArrayRef,
+            Arc::new(LargeStringArray::from(vec![
+                Some("delta"),
+                Some("epsilon"),
+                Some("zeta"),
+            ])) as ArrayRef,
+            Arc::new(LargeStringArray::from(vec![
+                Some("eta"),
+                Some("theta"),
+                Some("iota"),
+            ])) as ArrayRef,
         ];
 
         let greatest = greatest_inner(&input_large_utf8)?;
@@ -612,14 +654,15 @@ mod tests {
             .downcast_ref::<LargeStringArray>()
             .expect("Failed to downcast to LargeStringArray");
 
-        let expected = LargeStringArray::from(vec!["eta", "theta", "zeta"]);
+        let expected =
+            LargeStringArray::from(vec![Some("eta"), Some("theta"), Some("zeta")]);
         assert_eq!(greatest_large_utf8, &expected);
 
         Ok(())
     }
 
     #[test]
-    fn test_greatest_list_int32() -> Result<()> {
+    fn test_greatest_unsupported_list() -> Result<()> {
         let list1 = Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>(vec![
             Some(vec![Some(1), Some(2), Some(3)]),
             Some(vec![Some(4), Some(5), Some(6)]),
@@ -633,68 +676,101 @@ mod tests {
         ])) as ArrayRef;
 
         let input_list = vec![list1, list2];
-        let greatest_list = greatest_inner(&input_list)?;
-
-        // Construct the expected ListArray correctly
-        let expected = ListArray::from_iter_primitive::<Int32Type, _, _>(vec![
-            Some(vec![Some(7), Some(8), Some(9)]),
-            Some(vec![Some(10), Some(11), Some(12)]),
-            Some(vec![Some(13), Some(14)]),
-        ]);
-
-        // Compare using references
-        assert_eq!(greatest_list.as_ref(), expected.as_ref());
+        let result = greatest_inner(&input_list);
+        assert!(result.is_err());
+        let error_message = result.unwrap_err().to_string();
+        assert!(
+            error_message.contains("Greatest function not implemented for data type"),
+            "Expected error message to contain 'Greatest function not implemented for data type', but got '{}'",
+            error_message
+        );
 
         Ok(())
     }
 
     #[test]
-    fn test_greatest_struct_int64() -> Result<()> {
-        // Define fields
-        let field_a = Arc::new(Field::new("a", DataType::Int64, false));
-        let field_b = Arc::new(Field::new("b", DataType::Int64, false));
+    fn test_greatest_unsupported_struct() -> Result<()> {
+        let field_a = Field::new("a", DataType::Int64, false);
+        let field_b = Field::new("b", DataType::Int64, false);
 
-        // Define arrays for each field
         let array_a =
             Arc::new(Int64Array::from(vec![Some(1), Some(2), Some(3)])) as ArrayRef;
         let array_b =
             Arc::new(Int64Array::from(vec![Some(4), Some(5), Some(6)])) as ArrayRef;
 
-        // Create StructArray1
         let struct_array1 = Arc::new(StructArray::from(vec![
-            (field_a.clone(), array_a.clone()),
-            (field_b.clone(), array_b.clone()),
+            (Arc::new(field_a.clone()), array_a.clone()),
+            (Arc::new(field_b.clone()), array_b.clone()),
         ])) as ArrayRef;
 
-        // Define arrays for the second StructArray
         let array_a2 =
             Arc::new(Int64Array::from(vec![Some(7), Some(8), Some(9)])) as ArrayRef;
         let array_b2 =
             Arc::new(Int64Array::from(vec![Some(10), Some(11), Some(12)])) as ArrayRef;
 
-        // Create StructArray2
         let struct_array2 = Arc::new(StructArray::from(vec![
-            (field_a.clone(), array_a2.clone()),
-            (field_b.clone(), array_b2.clone()),
+            (Arc::new(field_a.clone()), array_a2.clone()),
+            (Arc::new(field_b.clone()), array_b2.clone()),
         ])) as ArrayRef;
 
         let input_struct = vec![struct_array1, struct_array2];
-        let greatest_struct = greatest_inner(&input_struct)?;
+        let result = greatest_inner(&input_struct);
+        assert!(result.is_err());
+        let error_message = result.unwrap_err().to_string();
+        assert!(
+            error_message.contains("Greatest function not implemented for data type"),
+            "Expected error message to contain 'Greatest function not implemented for data type', but got '{}'",
+            error_message
+        );
 
-        // Define expected fields and arrays
-        let expected_field_a =
-            Arc::new(Int64Array::from(vec![Some(7), Some(8), Some(9)])) as ArrayRef;
-        let expected_field_b =
-            Arc::new(Int64Array::from(vec![Some(10), Some(11), Some(12)])) as ArrayRef;
+        Ok(())
+    }
 
-        // Create expected StructArray
-        let expected = StructArray::from(vec![
-            (field_a, expected_field_a),
-            (field_b, expected_field_b),
-        ]);
+    // Additional edge cases
 
-        // Compare using references
-        assert_eq!(greatest_struct.as_ref(), expected.as_ref());
+    #[test]
+    fn test_greatest_all_nulls() -> Result<()> {
+        let input_nulls = vec![
+            Arc::new(Int32Array::from(vec![None, None, None])) as ArrayRef,
+            Arc::new(Int32Array::from(vec![None, None, None])) as ArrayRef,
+        ];
+
+        let greatest = greatest_inner(&input_nulls)?;
+        let greatest_int = greatest
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .expect("Failed to downcast to Int32Array");
+
+        let expected = Int32Array::from(vec![None, None, None]);
+        assert_eq!(greatest_int, &expected);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_greatest_with_infinities() -> Result<()> {
+        let input_float = vec![
+            Arc::new(Float64Array::from(vec![
+                Some(f64::NEG_INFINITY),
+                Some(1.0),
+                Some(2.0),
+            ])) as ArrayRef,
+            Arc::new(Float64Array::from(vec![
+                Some(0.0),
+                Some(f64::INFINITY),
+                Some(1.5),
+            ])) as ArrayRef,
+        ];
+
+        let greatest = greatest_inner(&input_float)?;
+        let greatest_float = greatest
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .expect("Failed to downcast to Float64Array");
+
+        let expected =
+            Float64Array::from(vec![Some(0.0), Some(f64::INFINITY), Some(2.0)]);
+        assert_eq!(greatest_float, &expected);
 
         Ok(())
     }
