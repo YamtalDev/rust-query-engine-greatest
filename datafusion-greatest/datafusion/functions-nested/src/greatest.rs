@@ -458,7 +458,6 @@ fn make_builder(data_type: &DataType, capacity: usize) -> Result<Box<dyn ArrayBu
         }
     })
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -469,9 +468,9 @@ mod tests {
     #[test]
     fn test_greatest_int32() -> Result<()> {
         let input_int = vec![
-            Arc::new(Int32Array::from(vec![1, 2, 3, None])) as ArrayRef,
-            Arc::new(Int32Array::from(vec![4, None, 6, 8])) as ArrayRef,
-            Arc::new(Int32Array::from(vec![7, 5, None, 9])) as ArrayRef,
+            Arc::new(Int32Array::from(vec![Some(1), Some(2), Some(3), None])) as ArrayRef,
+            Arc::new(Int32Array::from(vec![Some(4), None, Some(6), Some(8)])) as ArrayRef,
+            Arc::new(Int32Array::from(vec![Some(7), Some(5), None, Some(9)])) as ArrayRef,
         ];
 
         let greatest = greatest_inner(&input_int)?;
@@ -480,7 +479,7 @@ mod tests {
             .downcast_ref::<Int32Array>()
             .expect("Failed to downcast to Int32Array");
 
-        let expected = Int32Array::from(vec![7, 5, 6, 9]);
+        let expected = Int32Array::from(vec![Some(7), Some(5), Some(6), Some(9)]);
         assert_eq!(greatest_int, &expected);
 
         Ok(())
@@ -489,9 +488,10 @@ mod tests {
     #[test]
     fn test_greatest_float64_with_nan() -> Result<()> {
         let input_float = vec![
-            Arc::new(Float64Array::from(vec![1.1, f64::NAN, 3.3])) as ArrayRef,
-            Arc::new(Float64Array::from(vec![4.4, 5.5, f64::NAN])) as ArrayRef,
-            Arc::new(Float64Array::from(vec![7.7, 8.8, 9.9])) as ArrayRef,
+            Arc::new(Float64Array::from(vec![Some(1.1), None, Some(3.3)])) as ArrayRef,
+            Arc::new(Float64Array::from(vec![Some(4.4), Some(5.5), None])) as ArrayRef,
+            Arc::new(Float64Array::from(vec![Some(7.7), Some(8.8), Some(9.9)]))
+                as ArrayRef,
         ];
 
         let greatest = greatest_inner(&input_float)?;
@@ -500,7 +500,7 @@ mod tests {
             .downcast_ref::<Float64Array>()
             .expect("Failed to downcast to Float64Array");
 
-        let expected = Float64Array::from(vec![7.7, 8.8, 9.9]);
+        let expected = Float64Array::from(vec![Some(7.7), Some(8.8), Some(9.9)]);
         assert_eq!(greatest_float, &expected);
 
         Ok(())
@@ -554,7 +554,7 @@ mod tests {
     #[test]
     fn test_greatest_mixed_types_error() -> Result<()> {
         let input_mixed = vec![
-            Arc::new(Int32Array::from(vec![1, 2, 3])) as ArrayRef,
+            Arc::new(Int32Array::from(vec![Some(1), Some(2), Some(3)])) as ArrayRef,
             Arc::new(StringArray::from(vec!["a", "b", "c"])) as ArrayRef,
         ];
 
@@ -582,7 +582,8 @@ mod tests {
 
     #[test]
     fn test_greatest_single_argument() -> Result<()> {
-        let input_single = vec![Arc::new(Int32Array::from(vec![1, 2, 3])) as ArrayRef];
+        let input_single =
+            vec![Arc::new(Int32Array::from(vec![Some(1), Some(2), Some(3)])) as ArrayRef];
 
         let greatest = greatest_inner(&input_single)?;
         let greatest_int = greatest
@@ -590,7 +591,7 @@ mod tests {
             .downcast_ref::<Int32Array>()
             .expect("Failed to downcast to Int32Array");
 
-        let expected = Int32Array::from(vec![1, 2, 3]);
+        let expected = Int32Array::from(vec![Some(1), Some(2), Some(3)]);
         assert_eq!(greatest_int, &expected);
 
         Ok(())
@@ -634,47 +635,66 @@ mod tests {
         let input_list = vec![list1, list2];
         let greatest_list = greatest_inner(&input_list)?;
 
-        // Since ListArray's display is not straightforward, we'll perform type-specific assertions
+        // Construct the expected ListArray correctly
         let expected = ListArray::from_iter_primitive::<Int32Type, _, _>(vec![
             Some(vec![Some(7), Some(8), Some(9)]),
             Some(vec![Some(10), Some(11), Some(12)]),
             Some(vec![Some(13), Some(14)]),
         ]);
 
-        assert_eq!(greatest_list, expected.as_ref());
+        // Compare using references
+        assert_eq!(greatest_list.as_ref(), expected.as_ref());
 
         Ok(())
     }
 
     #[test]
     fn test_greatest_struct_int64() -> Result<()> {
-        // Define a StructArray with two fields: a and b
-        let field_a = Arc::new(Int64Array::from(vec![1, 2, 3])) as ArrayRef;
-        let field_b = Arc::new(Int64Array::from(vec![4, 5, 6])) as ArrayRef;
+        // Define fields
+        let field_a = Arc::new(Field::new("a", DataType::Int64, false));
+        let field_b = Arc::new(Field::new("b", DataType::Int64, false));
+
+        // Define arrays for each field
+        let array_a =
+            Arc::new(Int64Array::from(vec![Some(1), Some(2), Some(3)])) as ArrayRef;
+        let array_b =
+            Arc::new(Int64Array::from(vec![Some(4), Some(5), Some(6)])) as ArrayRef;
+
+        // Create StructArray1
         let struct_array1 = Arc::new(StructArray::from(vec![
-            ("a", field_a.clone()),
-            ("b", field_b.clone()),
+            (field_a.clone(), array_a.clone()),
+            (field_b.clone(), array_b.clone()),
         ])) as ArrayRef;
 
-        let field_a2 = Arc::new(Int64Array::from(vec![7, 8, 9])) as ArrayRef;
-        let field_b2 = Arc::new(Int64Array::from(vec![10, 11, 12])) as ArrayRef;
+        // Define arrays for the second StructArray
+        let array_a2 =
+            Arc::new(Int64Array::from(vec![Some(7), Some(8), Some(9)])) as ArrayRef;
+        let array_b2 =
+            Arc::new(Int64Array::from(vec![Some(10), Some(11), Some(12)])) as ArrayRef;
+
+        // Create StructArray2
         let struct_array2 = Arc::new(StructArray::from(vec![
-            ("a", field_a2.clone()),
-            ("b", field_b2.clone()),
+            (field_a.clone(), array_a2.clone()),
+            (field_b.clone(), array_b2.clone()),
         ])) as ArrayRef;
 
         let input_struct = vec![struct_array1, struct_array2];
         let greatest_struct = greatest_inner(&input_struct)?;
 
-        // Expected StructArray with greatest values
-        let expected_field_a = Int64Array::from(vec![7, 8, 9]);
-        let expected_field_b = Int64Array::from(vec![10, 11, 12]);
-        let expected_struct = StructArray::from(vec![
-            ("a", Arc::new(expected_field_a) as ArrayRef),
-            ("b", Arc::new(expected_field_b) as ArrayRef),
+        // Define expected fields and arrays
+        let expected_field_a =
+            Arc::new(Int64Array::from(vec![Some(7), Some(8), Some(9)])) as ArrayRef;
+        let expected_field_b =
+            Arc::new(Int64Array::from(vec![Some(10), Some(11), Some(12)])) as ArrayRef;
+
+        // Create expected StructArray
+        let expected = StructArray::from(vec![
+            (field_a, expected_field_a),
+            (field_b, expected_field_b),
         ]);
 
-        assert_eq!(greatest_struct, expected_struct.as_ref());
+        // Compare using references
+        assert_eq!(greatest_struct.as_ref(), expected.as_ref());
 
         Ok(())
     }
