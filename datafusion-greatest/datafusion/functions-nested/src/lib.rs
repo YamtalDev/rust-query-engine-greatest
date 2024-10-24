@@ -86,6 +86,7 @@ pub mod expr_fn {
     pub use super::extract::array_pop_front;
     pub use super::extract::array_slice;
     pub use super::flatten::flatten;
+    pub use super::greatest::greatest;
     pub use super::length::array_length;
     pub use super::make_array::make_array;
     pub use super::map_extract::map_extract;
@@ -110,7 +111,6 @@ pub mod expr_fn {
     pub use super::sort::array_sort;
     pub use super::string::array_to_string;
     pub use super::string::string_to_array;
-    pub use super::greatest::greatest;
 }
 
 /// Return all default nested type functions

@@ -57,6 +57,8 @@ itertools = { workspace = true, features = ["use_std"] }
 log = { workspace = true }
 paste = "1.0.14"
 rand = "0.8.5"
+chrono = "0.4"
+
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio"] }
