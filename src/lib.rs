@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 /// PyO3 wrapper function to execute the greatest query.
 #[pyfunction]
-fn run_greatest_query(input: Vec<Vec<i32>>) -> PyResult<Vec<Option<i32>>> {
+fn run_greatest(input: Vec<Vec<Option<i32>>>) -> PyResult<Vec<Option<i32>>> {
     // Convert input to ArrayRefs
     let arrays: Vec<ArrayRef> = input
         .iter()
@@ -45,6 +45,6 @@ fn run_greatest_query(input: Vec<Vec<i32>>) -> PyResult<Vec<Option<i32>>> {
 /// PyO3 module definition.
 #[pymodule]
 fn greatest(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(run_greatest_query, m)?)?;
+    m.add_function(wrap_pyfunction!(run_greatest, m)?)?;
     Ok(())
 }
