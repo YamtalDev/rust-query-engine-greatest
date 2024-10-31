@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+datafusion-expr = { path = "datafusion-greatest/datafusion/expr" }
 datafusion = { version = "42.0.0", features = ["parquet"] }
 datafusion-common = { path = "datafusion-greatest/datafusion/common" }
 datafusion-functions-nested = { path = "datafusion-greatest/datafusion/functions-nested" }

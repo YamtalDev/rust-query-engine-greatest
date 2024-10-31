@@ -34,8 +34,9 @@ use std::any::Any;
 use std::cmp::Ordering;
 use std::sync::{Arc, OnceLock};
 use types::{
-    Date32Type, Date64Type, TimestampMicrosecondType, TimestampMillisecondType,
-    TimestampNanosecondType, TimestampSecondType,
+    Date32Type, Date64Type, Time32MillisecondType, Time32SecondType,
+    Time64MicrosecondType, Time64NanosecondType, TimestampMicrosecondType,
+    TimestampMillisecondType, TimestampNanosecondType, TimestampSecondType,
 };
 
 make_udf_expr_and_func!(
@@ -80,19 +81,23 @@ impl ScalarUDFImpl for Greatest {
             ));
         }
 
-        // Update to coerce mixed numeric types to Float64
         let mut common_type = arg_types[0].clone();
         for arg_type in &arg_types[1..] {
-            match (&common_type, arg_type) {
-                // If either type is Float64, coerce both to Float64
-                (DataType::Float64, _) | (_, DataType::Float64) => {
-                    common_type = DataType::Float64;
-                }
-                _ => {
-                    common_type = get_wider_type(&common_type, arg_type)?;
-                }
-            }
+            let coerced_type =
+                if is_date_type(&common_type) && is_timestamp_type(arg_type) {
+                    arg_type.clone()
+                } else if is_timestamp_type(&common_type) && is_date_type(arg_type) {
+                    common_type.clone()
+                } else if (common_type == DataType::Boolean && arg_type.is_numeric())
+                    || (arg_type == &DataType::Boolean && common_type.is_numeric())
+                {
+                    DataType::Int64
+                } else {
+                    get_wider_type(&common_type, arg_type)?
+                };
+            common_type = coerced_type;
         }
+
         Ok(common_type)
     }
 
@@ -107,6 +112,14 @@ impl ScalarUDFImpl for Greatest {
     fn documentation(&self) -> Option<&Documentation> {
         Some(get_greatest_doc())
     }
+}
+
+fn is_date_type(data_type: &DataType) -> bool {
+    matches!(data_type, DataType::Date32 | DataType::Date64)
+}
+
+fn is_timestamp_type(data_type: &DataType) -> bool {
+    matches!(data_type, DataType::Timestamp(_, _))
 }
 
 static DOCUMENTATION: OnceLock<Documentation> = OnceLock::new();
@@ -160,6 +173,16 @@ pub fn greatest_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
         common_type
     };
 
+    // **Handle DataType::Null**
+    if data_type == DataType::Null {
+        // All inputs are Null
+        let num_rows = args[0].len();
+        // Create a NullArray of length num_rows
+        let null_array = NullArray::new(num_rows);
+        return Ok(Arc::new(null_array) as ArrayRef);
+    }
+
+    // **Proceed with casting and the rest of the function**
     // Cast all arrays to the common type
     let arrays = args
         .iter()
@@ -183,8 +206,21 @@ pub fn greatest_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
         DataType::UInt16 => compute_greatest_numeric::<UInt16Type>(&arrays),
         DataType::UInt32 => compute_greatest_numeric::<UInt32Type>(&arrays),
         DataType::UInt64 => compute_greatest_numeric::<UInt64Type>(&arrays),
+        DataType::Decimal128(_, _) => compute_greatest_decimal(&arrays),
         DataType::Date32 => compute_greatest_numeric::<Date32Type>(&arrays),
         DataType::Date64 => compute_greatest_numeric::<Date64Type>(&arrays),
+        DataType::Time32(TimeUnit::Second) => {
+            compute_greatest_numeric::<Time32SecondType>(&arrays)
+        }
+        DataType::Time32(TimeUnit::Millisecond) => {
+            compute_greatest_numeric::<Time32MillisecondType>(&arrays)
+        }
+        DataType::Time64(TimeUnit::Microsecond) => {
+            compute_greatest_numeric::<Time64MicrosecondType>(&arrays)
+        }
+        DataType::Time64(TimeUnit::Nanosecond) => {
+            compute_greatest_numeric::<Time64NanosecondType>(&arrays)
+        }
         DataType::Timestamp(TimeUnit::Second, _) => {
             compute_greatest_numeric::<TimestampSecondType>(&arrays)
         }
@@ -252,6 +288,65 @@ where
     Ok(Arc::new(builder.finish()))
 }
 
+fn compute_greatest_decimal(arrays: &[ArrayRef]) -> Result<ArrayRef> {
+    // Ensure all arrays are Decimal128Array
+    let arrays = arrays
+        .iter()
+        .map(|array| {
+            array
+                .as_any()
+                .downcast_ref::<Decimal128Array>()
+                .ok_or_else(|| {
+                    DataFusionError::Execution(
+                        "Failed to downcast array to Decimal128Array".to_string(),
+                    )
+                })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let num_rows = arrays[0].len();
+    let data_type = arrays[0].data_type().clone();
+
+    // Extract precision and scale from data_type
+    let (_precision, _scale) = match &data_type {
+        DataType::Decimal128(p, s) => (*p, *s),
+        _ => {
+            return Err(DataFusionError::Execution(
+                "Data type is not Decimal128".to_string(),
+            ))
+        }
+    };
+
+    // Initialize Decimal128Builder with precision and scale
+    let mut builder = Decimal128Builder::with_capacity(num_rows);
+
+    for row in 0..num_rows {
+        let mut max_value: Option<i128> = None;
+        for array in &arrays {
+            if array.is_valid(row) {
+                let value = array.value(row);
+                max_value = Some(match max_value {
+                    None => value,
+                    Some(current_max) => {
+                        if value > current_max {
+                            value
+                        } else {
+                            current_max
+                        }
+                    }
+                });
+            }
+        }
+        if let Some(value) = max_value {
+            builder.append_value(value);
+        } else {
+            builder.append_null();
+        }
+    }
+
+    Ok(Arc::new(builder.finish()))
+}
+
 // Function for floating-point types with NaN handling
 fn compute_greatest_float<T>(arrays: &[ArrayRef]) -> Result<ArrayRef>
 where
@@ -274,21 +369,31 @@ where
     let mut builder = PrimitiveBuilder::<T>::with_capacity(num_rows);
 
     for row in 0..num_rows {
-        let max_value = arrays
-            .iter()
-            .filter_map(|array| {
-                if array.is_valid(row) {
-                    Some(array.value(row))
-                } else {
-                    None
+        let values = arrays.iter().filter_map(|array| {
+            if array.is_valid(row) {
+                Some(array.value(row))
+            } else {
+                None
+            }
+        });
+
+        let mut max_value: Option<T::Native> = None;
+        for value in values {
+            max_value = Some(match max_value {
+                None => value,
+                Some(current_max) => {
+                    if current_max.is_nan() {
+                        current_max
+                    } else if value.is_nan() {
+                        value
+                    } else if value > current_max {
+                        value
+                    } else {
+                        current_max
+                    }
                 }
-            })
-            .max_by(|a, b| match (a.partial_cmp(b), a.is_nan(), b.is_nan()) {
-                (Some(ordering), false, false) => ordering,
-                (_, true, false) => Ordering::Greater,
-                (_, false, true) => Ordering::Less,
-                _ => Ordering::Equal,
             });
+        }
 
         if let Some(value) = max_value {
             builder.append_value(value);
