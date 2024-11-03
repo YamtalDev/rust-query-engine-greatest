@@ -34,10 +34,6 @@ The **Rust Query Engine Greatest Function** project implements the `GREATEST` SQ
 
 The `GREATEST` function returns the greatest value among a list of column names for each row, skipping `NULL` values. This function takes at least two parameters and will return `NULL` if all parameters are `NULL`.
 
-**New in version 1.5.0.**
-
-**Changed in version 3.4.0:** Supports Spark Connect.
-
 ### Parameters
 
 - `*cols: ColumnOrName`: Two or more columns or expressions to compare. All columns should be of compatible data types.
@@ -45,7 +41,6 @@ The `GREATEST` function returns the greatest value among a list of column names 
 ### Returns
 
 - **Column:** The greatest value among the provided columns for each row. The return type is determined based on type coercion rules similar to Spark's `GREATEST` function.
-
 
 ## Prerequisites
 
