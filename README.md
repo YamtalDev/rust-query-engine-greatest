@@ -10,10 +10,10 @@ The **Rust Query Engine Greatest Function** project implements the `GREATEST` SQ
 - **Python Bindings:** Expose the Rust `GREATEST` function to Python using [PyO3](https://pyo3.rs/), allowing Python applications to leverage the functionality.
 - **Comprehensive Testing:** A robust test suite comparing the Rust implementation against Spark's `GREATEST` function to ensure accuracy and consistency.
 - **DataFusion Integration:** Seamlessly integrate with DataFusion, enabling the use of the `GREATEST` function within SQL queries.
-- **Command-Line Interface (CLI):** Execute SQL scripts containing `GREATEST` function tests directly from the terminal.
 
 ## Table of Contents
 
+- [Documentation](documentation)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
   - [Building and Running the Rust Project](#building-and-running-the-rust-project)
@@ -25,10 +25,27 @@ The **Rust Query Engine Greatest Function** project implements the `GREATEST` SQ
   - [Running the Rust Main](#running-the-rust-main)
   - [Using the Python Module](#using-the-python-module)
   - [Executing SQL Scripts with the CLI](#executing-sql-scripts-with-the-cli)
-- [Test Results](#test-results)
-- [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 - [License](#license)
+
+## Documentation
+
+### Description
+
+The `GREATEST` function returns the greatest value among a list of column names for each row, skipping `NULL` values. This function takes at least two parameters and will return `NULL` if all parameters are `NULL`.
+
+**New in version 1.5.0.**
+
+**Changed in version 3.4.0:** Supports Spark Connect.
+
+### Parameters
+
+- `*cols: ColumnOrName`: Two or more columns or expressions to compare. All columns should be of compatible data types.
+
+### Returns
+
+- **Column:** The greatest value among the provided columns for each row. The return type is determined based on type coercion rules similar to Spark's `GREATEST` function.
+
 
 ## Prerequisites
 
@@ -157,7 +174,7 @@ Execute the Python test suite to validate the `GREATEST` function against Spark'
 
    **Sample Output:**
 
-   ```
+   ```bash
    Setting default log level to "WARN".
    ...
    Starting Greatest Function Tests...
@@ -169,10 +186,9 @@ Execute the Python test suite to validate the `GREATEST` function against Spark'
    Test 'test_greatest_date32': PASSED.
    Test 'test_greatest_date64': PASSED.
    ...
+   ...
    All tests completed.
    ```
-
-   > **Note:** The `test_greatest_timestamp_ns` test failed due to a type mismatch between Spark (`datetime.datetime`) and Rust (`datetime.date`). This discrepancy needs to be addressed to ensure consistent behavior.
 
 ### Building and Testing DataFusion Functions
 
@@ -190,7 +206,7 @@ Execute the Python test suite to validate the `GREATEST` function against Spark'
 
    **Sample Output:**
 
-   ```
+   ```bash
    Compiling datafusion-functions-nested v42.0.0 ...
    Finished test profile [unoptimized + debuginfo] target(s) in 9.54s
     Running unittests src/lib.rs (target/debug/deps/datafusion_functions_nested-cb97c815e57cf316)

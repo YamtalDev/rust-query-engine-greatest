@@ -9,7 +9,6 @@ from pyspark.sql.types import (
     StringType,
     BooleanType,
     DateType,
-    TimestampType,
 )
 from pyspark.sql.utils import AnalysisException
 from datetime import datetime, date
