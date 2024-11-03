@@ -1,2 +1,0 @@
-Project [static_invoke(BitmapExpressionUtils.bitmapCount(bytes#0)) AS bitmap_count(bytes)#0L]
-+- LocalRelation <empty>, [id#0L, bytes#0]
