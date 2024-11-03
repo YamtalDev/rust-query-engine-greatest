@@ -154,14 +154,12 @@ pub fn greatest_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
         ));
     }
 
-    // Determine the common supertype of all arguments with Float64 coercion
     let arg_types: Vec<DataType> =
         args.iter().map(|arg| arg.data_type().clone()).collect();
     let data_type = {
         let mut common_type = arg_types[0].clone();
         for arg_type in &arg_types[1..] {
             match (&common_type, arg_type) {
-                // If either type is Float64, coerce to Float64
                 (DataType::Float64, _) | (_, DataType::Float64) => {
                     common_type = DataType::Float64;
                 }
@@ -173,17 +171,12 @@ pub fn greatest_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
         common_type
     };
 
-    // **Handle DataType::Null**
     if data_type == DataType::Null {
-        // All inputs are Null
         let num_rows = args[0].len();
-        // Create a NullArray of length num_rows
         let null_array = NullArray::new(num_rows);
         return Ok(Arc::new(null_array) as ArrayRef);
     }
 
-    // **Proceed with casting and the rest of the function**
-    // Cast all arrays to the common type
     let arrays = args
         .iter()
         .map(|array| {
@@ -245,7 +238,6 @@ pub fn greatest_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
     }
 }
 
-// Function for integer and non-floating-point numeric types
 fn compute_greatest_numeric<T>(arrays: &[ArrayRef]) -> Result<ArrayRef>
 where
     T: ArrowPrimitiveType,
@@ -289,7 +281,6 @@ where
 }
 
 fn compute_greatest_decimal(arrays: &[ArrayRef]) -> Result<ArrayRef> {
-    // Ensure all arrays are Decimal128Array
     let arrays = arrays
         .iter()
         .map(|array| {
@@ -307,7 +298,6 @@ fn compute_greatest_decimal(arrays: &[ArrayRef]) -> Result<ArrayRef> {
     let num_rows = arrays[0].len();
     let data_type = arrays[0].data_type().clone();
 
-    // Extract precision and scale from data_type
     let (_precision, _scale) = match &data_type {
         DataType::Decimal128(p, s) => (*p, *s),
         _ => {
@@ -317,7 +307,6 @@ fn compute_greatest_decimal(arrays: &[ArrayRef]) -> Result<ArrayRef> {
         }
     };
 
-    // Initialize Decimal128Builder with precision and scale
     let mut builder = Decimal128Builder::with_capacity(num_rows);
 
     for row in 0..num_rows {
@@ -347,7 +336,6 @@ fn compute_greatest_decimal(arrays: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(builder.finish()))
 }
 
-// Function for floating-point types with NaN handling
 fn compute_greatest_float<T>(arrays: &[ArrayRef]) -> Result<ArrayRef>
 where
     T: ArrowPrimitiveType,
@@ -534,7 +522,6 @@ mod tests {
     use datafusion_common::Result;
     use std::sync::Arc;
 
-    /// Helper function to create a Date32Array from date strings
     fn date32_array_from_dates(dates: &[Option<&str>]) -> Date32Array {
         dates
             .iter()
@@ -550,7 +537,6 @@ mod tests {
             .collect()
     }
 
-    /// Helper function to create a Date64Array from date strings
     fn date64_array_from_dates(dates: &[Option<&str>]) -> Date64Array {
         dates
             .iter()
@@ -566,7 +552,6 @@ mod tests {
             .collect()
     }
 
-    /// Helper function to create a TimestampNanosecondArray from datetime strings
     fn timestamp_ns_array_from_datetimes(
         datetimes: &[Option<&str>],
     ) -> TimestampNanosecondArray {
@@ -657,11 +642,6 @@ mod tests {
             .downcast_ref::<Float64Array>()
             .expect("Failed to downcast to Float64Array");
 
-        // Expected results:
-        // Row 0: 1.1, 4.4, 7.7 → Greatest: 7.7
-        // Row 1: None, 5.5, 8.8 → Greatest: 8.8
-        // Row 2: 3.3, None, 9.9 → Greatest: 9.9
-        // Row 3: NaN, 2.2, NaN → Greatest: NaN
         let expected =
             Float64Array::from(vec![Some(7.7), Some(8.8), Some(9.9), Some(f64::NAN)]);
         assert!(
@@ -709,15 +689,10 @@ mod tests {
                 .iter()
                 .zip(expected.iter())
                 .all(|(a, b)| match (a, b) {
-                    // Both are NaN
                     (Some(a), Some(b)) if a.is_nan() && b.is_nan() => true,
-                    // Both are exactly equal (covers Infinity and -Infinity)
                     (Some(a), Some(b)) if a == b => true,
-                    // Both are finite and approximately equal
                     (Some(a), Some(b)) => (a - b).abs() < f64::EPSILON,
-                    // Both are None
                     (None, None) => true,
-                    // Any other case is a mismatch
                     _ => false,
                 }),
             "Arrays are not equal"
@@ -1138,7 +1113,6 @@ mod tests {
     #[test]
     /// Tests the greatest function with a very large number of arguments to check code generation limits.
     fn test_greatest_code_generation_limit() -> Result<()> {
-        // Test with a large number of arguments to check for code generation limits
         let num_arrays = 2000;
         let mut input_arrays: Vec<ArrayRef> = Vec::with_capacity(num_arrays);
         for i in 0..num_arrays {

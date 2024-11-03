@@ -9,7 +9,6 @@ use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDate, PyDateAccess, PyDateTime, PyList, PyTimeAccess};
 use std::sync::Arc;
 
-/// Infer the data type from a PyAny object.
 fn infer_single_data_type(_py: Python, item: &PyAny) -> PyResult<Option<DataType>> {
     if item.is_instance_of::<pyo3::types::PyLong>() {
         Ok(Some(DataType::Int64))
@@ -28,7 +27,6 @@ fn infer_single_data_type(_py: Python, item: &PyAny) -> PyResult<Option<DataType
     }
 }
 
-/// Infer the common data type among a list of data types.
 fn infer_common_data_type(types: &[DataType]) -> Result<DataType, PyErr> {
     if types.is_empty() {
         return Err(PyErr::new::<exceptions::PyTypeError, _>(
@@ -55,7 +53,6 @@ fn infer_common_data_type(types: &[DataType]) -> Result<DataType, PyErr> {
     Ok(common_type)
 }
 
-/// PyO3 wrapper function to execute the greatest query generically.
 #[pyfunction]
 fn run_greatest(py: Python, input: &Bound<'_, PyList>) -> PyResult<PyObject> {
     let num_columns = input.len();
@@ -85,13 +82,11 @@ fn run_greatest(py: Python, input: &Bound<'_, PyList>) -> PyResult<PyObject> {
     }
 
     if types.is_empty() {
-        // All inputs are null
         let num_rows = input.get_item(0)?.downcast::<PyList>()?.len();
         let rust_result: Vec<Option<PyObject>> = vec![None; num_rows];
         return Ok(PyList::new_bound(py, rust_result).into());
     }
 
-    // Infer the common data type
     let data_type = infer_common_data_type(&types)?;
 
     // Convert input columns to Arrow ArrayRefs based on the inferred data type
