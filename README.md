@@ -13,7 +13,7 @@ The **Rust Query Engine Greatest Function** project implements the `GREATEST` SQ
 
 ## Table of Contents
 
-- [Documentation](documentation)
+- [Documentation](#documentation)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
   - [Building and Running the Rust Project](#building-and-running-the-rust-project)
