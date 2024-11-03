@@ -83,7 +83,7 @@ Before getting started, ensure you have the following installed on your system:
 
    **Sample Output:**
 
-   ```
+   ```bash
    Greatest Int: PrimitiveArray<Int32>
    [
      7,
@@ -144,7 +144,7 @@ Before getting started, ensure you have the following installed on your system:
 
    **Output:**
 
-   ```
+   ```bash
    🔗 Found pyo3 bindings
    🐍 Found CPython 3.12 at /path/to/venv/bin/python
       Compiling pyo3-build-config v0.21.2
