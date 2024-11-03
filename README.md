@@ -281,6 +281,8 @@ print(result)
 # Output: [7, 5, 6, 9]
 ```
 
+## Contributions
+
 Contributions are welcome! Please follow these steps to contribute:
 
 ## License
